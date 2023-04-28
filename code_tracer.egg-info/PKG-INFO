@@ -1,3 +1,18 @@
+Metadata-Version: 2.1  
+Name: code-tracer  
+Version: 0.1.0  
+Summary: Track Every Line of Code  
+Home-page: http://github.com/Potaten2015/code-tracer  
+Author: Potaten2015  
+License: MIT  
+Classifier: Programming Language :: Python :: 3  
+Classifier: License :: OSI Approved :: MIT License  
+Classifier: Operating System :: OS Independent  
+Requires-Python: >=3.7, <4  
+Description-Content-Type: text/markdown  
+Provides-Extra: dev  
+License-File: LICENSE
+
 <div align="center">
 
 # code-tracer
@@ -13,7 +28,7 @@ A one-liner description of your project goes here.
 
 </div>
 
-A longer paragraph description of your project goes here.
+Visualize code changes in your project. Every file, every change.
 
 ## Install
 
