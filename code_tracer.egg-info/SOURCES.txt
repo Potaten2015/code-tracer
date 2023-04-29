@@ -10,6 +10,3 @@ code_tracer.egg-info/dependency_links.txt
 code_tracer.egg-info/entry_points.txt
 code_tracer.egg-info/requires.txt
 code_tracer.egg-info/top_level.txt
-test/unit/__init__.py
-test/unit/conftest.py
-test/unit/test_my_module.py

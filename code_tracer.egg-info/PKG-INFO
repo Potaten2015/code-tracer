@@ -1,16 +1,16 @@
-Metadata-Version: 2.1  
-Name: code-tracer  
-Version: 0.1.0  
-Summary: Track Every Line of Code  
-Home-page: http://github.com/Potaten2015/code-tracer  
-Author: Potaten2015  
-License: MIT  
-Classifier: Programming Language :: Python :: 3  
-Classifier: License :: OSI Approved :: MIT License  
-Classifier: Operating System :: OS Independent  
-Requires-Python: >=3.7, <4  
-Description-Content-Type: text/markdown  
-Provides-Extra: dev  
+Metadata-Version: 2.1
+Name: code-tracer
+Version: 0.1.0
+Summary: Track Every Line of Code
+Home-page: http://github.com/Potaten2015/code-tracer
+Author: Potaten2015
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7, <4
+Description-Content-Type: text/markdown
+Provides-Extra: dev
 License-File: LICENSE
 
 <div align="center">
@@ -20,7 +20,6 @@ License-File: LICENSE
 A one-liner description of your project goes here.
 
 [![Build Status](https://github.com/Potaten2015/code-tracer/workflows/build/badge.svg)](https://github.com/Potaten2015/code-tracer/actions)
-[![Coverage Status](https://coveralls.io/repos/github/Potaten2015/code-tracer/badge.svg?branch=main)](https://coveralls.io/github/Potaten2015/code-tracer?branch=main)
 [![PyPi](https://img.shields.io/pypi/v/code-tracer)](https://pypi.org/project/code-tracer)
 [![Licence](https://img.shields.io/github/license/Potaten2015/code-tracer)](LICENSE)
 
@@ -28,7 +27,7 @@ A one-liner description of your project goes here.
 
 </div>
 
-Visualize code changes in your project. Every file, every change.
+A longer paragraph description of your project goes here.
 
 ## Install
 
