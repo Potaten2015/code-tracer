@@ -3,7 +3,7 @@ README.md
 pyproject.toml
 setup.py
 code_tracer/__init__.py
-code_tracer/main.py
+code_tracer/watch_directories.py
 code_tracer.egg-info/PKG-INFO
 code_tracer.egg-info/SOURCES.txt
 code_tracer.egg-info/dependency_links.txt

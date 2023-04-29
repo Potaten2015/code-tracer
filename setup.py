@@ -47,7 +47,7 @@ setuptools.setup(
     },
     entry_points={
         'console_scripts': [
-            'code-tracer=code_tracer.main:main',
+            'code-tracer=code_tracer.watch_directories:watch_directories',
         ]
     },
     python_requires='>=3.7, <4',

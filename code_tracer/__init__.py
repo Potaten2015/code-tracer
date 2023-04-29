@@ -1,5 +1,5 @@
-from main import main
+from watch_directories import watch_directories
 
 __all__ = [
-    'main',
+    'watch_directories',
 ]

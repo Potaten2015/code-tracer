@@ -1,2 +1,2 @@
 [console_scripts]
-code-tracer = code_tracer.main:main
+code-tracer = code_tracer.watch_directories:watch_directories
