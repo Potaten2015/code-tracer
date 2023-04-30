@@ -6,17 +6,48 @@ import time
 import datetime
 import logging
 import glob
-from pathlib import Path
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def is_ignored(path, patterns):
-    for pattern in patterns:
-        if fnmatch.fnmatch(path, pattern):
+def is_ignored(path, ignore_items):
+    for ignore_item in ignore_items:
+        if fnmatch.fnmatch(path, ignore_item):
             return True
     return False
+
+
+def expand_wildcards(paths, config):
+    expanded_paths = []
+    ignore_items = config["ignore"]
+    ignore_items = [os.path.join(config["project_dir"], item) for item in ignore_items]
+    for path in paths:
+        if '*' in path:
+            new_paths = glob.glob(path, include_hidden=True)
+            for path in new_paths:
+                if ".traceignore" in path:
+                    with open(path, 'r') as f:
+                        traceignore = f.read().splitlines()
+                    config["ignore"] += [os.path.join(os.path.dirname(path), item) for item in traceignore]
+            for new_path in new_paths:
+                if os.path.isdir(new_path):
+                    expanded_paths += expand_wildcards([os.path.join(new_path, '*')], config)
+                else:
+                    expanded_paths += expand_wildcards([new_path], config)
+        elif os.path.isdir(path):
+            expanded_paths += expand_wildcards([os.path.join(path, '*')], config)
+        else:
+            if not is_ignored(path, ignore_items):
+                expanded_paths.append(path)
+    return expanded_paths
+
+
+def get_items(key, config):
+    items = config[key]
+    items = [os.path.join(config["project_dir"], item) for item in items]
+    items = expand_wildcards(items, config)
+    return items
 
 
 # Define the function to watch the directories/files
@@ -27,9 +58,10 @@ def watch_directories():
     with open(config_filepath, 'r') as f:
         config = json.load(f)
 
+    config['project_dir'] = project_dir
     # Get the directories/files to watch/ignore
-    watch_items = config['watch']
-    ignore_items = config['ignore']
+    watch_items = get_items('watch', config)
+    logging.info(f'Watching {len(watch_items)} items.')
 
     # Get the project name
     project_name = config['name']
@@ -58,40 +90,14 @@ def watch_directories():
     try:
         while True:
             for item in watch_items:
-                # Check if the item is in the ignore list
-                if is_ignored(item, ignore_items):
-                    continue
-
-                # Check if the item is a directory
-                if os.path.isdir(item):
-                    for root, dirs, files in os.walk(item):
-                        # Check for a .traceignore file in the directory
-                        traceignore_path = os.path.join(root, '.traceignore')
-                        if os.path.exists(traceignore_path):
-                            with open(traceignore_path, 'r') as f:
-                                traceignore = f.read().splitlines()
-                            ignore_items += [os.path.join(root, pattern) for pattern in traceignore]
-                        dirs[:] = [d for d in dirs if not is_ignored(os.path.join(root, d), ignore_items)]
-                        for filename in files:
-                            filepath = os.path.join(root, filename)
-                            if file_has_changed(filepath, last_modified_times):
-                                try:
-                                    lines_changed, size_changed = copy_file(filepath, output_dir)
-                                    total_size += size_changed
-                                    logging.info(f'File {filepath} has changed. {lines_changed} lines changed.')
-                                except UnicodeDecodeError:
-                                    unreadable_files.append(filepath)
-                                    logging.warning(f'Unable to read file {filepath}.')
-                # Check if the item is a file
-                elif os.path.isfile(item):
-                    if file_has_changed(item, last_modified_times):
-                        try:
-                            lines_changed, size_changed = copy_file(item, output_dir)
-                            total_size += size_changed
-                            logging.info(f'File {item} has changed. {lines_changed} lines changed.')
-                        except UnicodeDecodeError:
-                            unreadable_files.append(item)
-                            logging.warning(f'Unable to read file {item}.')
+                if file_has_changed(item, last_modified_times):
+                    try:
+                        lines_changed, size_changed = copy_file(item, output_dir)
+                        total_size += size_changed
+                        logging.info(f'File {item} has changed. {lines_changed} lines changed.')
+                    except UnicodeDecodeError:
+                        unreadable_files.append(item)
+                        logging.warning(f'Unable to read file {item}.')
 
             # Wait for the specified interval before checking for changes again
             time.sleep(config['interval'])
