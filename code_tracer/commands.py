@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import glob
+import video_creator
 
 
 def init_config_file():
@@ -93,6 +94,15 @@ def init_config_file():
     print('Config file created successfully!')
 
 
+def generate_video():
+    project_dir = input("Enter the path to the project directory: ")
+    config_filepath = os.path.join(project_dir, "config.json")
+    with open(config_filepath, "r") as f:
+        config = json.load(f)
+
+    video_creator.create_video(config)
+
+
 if __name__ == '__main__':
     # Create the argument parser
     parser = argparse.ArgumentParser(description='CLI tool to initialize the config.json file.')
@@ -100,6 +110,9 @@ if __name__ == '__main__':
     # Add the init subcommand
     subparsers = parser.add_subparsers(dest='command')
     init_parser = subparsers.add_parser('init', help='Initialize the config.json file.')
+    generate_video_parser = subparsers.add_parser(
+        "generate_video", help="Generate a video from the saved code changes."
+    )
 
     # Parse the arguments
 
@@ -108,5 +121,7 @@ if __name__ == '__main__':
     # Call the appropriate function based on the command
     if args.command == 'init':
         init_config_file()
+    elif args.command == 'generate_video':
+        generate_video()
     else:
         parser.print_help()

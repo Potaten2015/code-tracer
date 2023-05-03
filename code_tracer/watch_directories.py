@@ -1,11 +1,10 @@
 import fnmatch
 import os
 import json
-import shutil
 import time
-import datetime
 import logging
 import glob
+from video_creator import get_language
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -92,7 +91,8 @@ def watch_directories():
             for item in watch_items:
                 if file_has_changed(item, last_modified_times):
                     try:
-                        lines_changed, size_changed = copy_file(item, output_dir)
+                        timestamp = time.strftime('%Y%m%d-%H%M%S')
+                        lines_changed, size_changed = copy_file(item, output_dir, timestamp, project_name)
                         total_size += size_changed
                         logging.info(f'File {item} has changed. {lines_changed} lines changed.')
                     except UnicodeDecodeError:
@@ -133,39 +133,54 @@ def file_has_changed(filepath, last_modified_times):
     return False
 
 
-# Define the function to copy the file to the output directory
-def copy_file(filepath, output_dir):
-    # Get the modification time of the file
-    modified_time = datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
+def copy_file(file_path, project_dir, timestamp, project_name):
+    file_name = os.path.basename(file_path)
 
-    # Create the output filename
-    output_filename = f'{modified_time.strftime("%Y.%m.%d-%H:%M:%S")}.txt'
-    output_path = os.path.join(output_dir, output_filename)
+    language = get_language(file_name)
 
-    # Copy the file to the output directory
-    encodings = ['utf-8', 'iso-8859-1', 'windows-1252']
-    for encoding in encodings:
-        try:
-            with open(filepath, 'r', encoding=encoding) as f:
-                with open(output_path, 'w') as f_out:
-                    shutil.copyfileobj(f, f_out)
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
 
-                # Count the number of lines in the file
-                with open(filepath, 'r', encoding=encoding) as f:
-                    lines_changed = len(f.readlines())
+    data = {"filename": file_name, "language": language, "content": content, "project_name": project_name}
 
-                # Log that the file has been saved
-                logging.info(f'File {filepath} saved to {output_path} ({lines_changed} lines).')
+    changes_dir = os.path.join(project_dir, "changes")
+    os.makedirs(changes_dir, exist_ok=True)
 
-                # Calculate the size of the copied file
-                size_changed = os.path.getsize(output_path) - os.path.getsize(filepath)
+    change_filename = f"{timestamp}_{file_name}.json"
+    change_file_path = os.path.join(changes_dir, change_filename)
 
-                return lines_changed, size_changed
-        except UnicodeDecodeError:
-            continue
+    # Get the previous change file if it exists
+    prev_change_file = get_previous_change_file(changes_dir, file_name)
 
-    # Log that the file is unreadable
-    raise UnicodeDecodeError
+    if prev_change_file:
+        with open(prev_change_file, "r", encoding="utf-8") as f:
+            prev_data = json.load(f)
+            prev_content = prev_data["content"]
+    else:
+        prev_content = ""
+
+    # Count the difference in lines between the new and old files
+    lines_changed = len(content.splitlines()) - len(prev_content.splitlines())
+
+    with open(change_file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+    # Log that the file has been saved
+    logging.info(f'File {file_path} saved to {change_file_path} ({lines_changed} lines changed).')
+
+    # Calculate the size of the new file
+    new_file_size = os.path.getsize(change_file_path)
+
+    return lines_changed, new_file_size
+
+
+def get_previous_change_file(changes_dir, file_name):
+    change_files = sorted(glob.glob(os.path.join(changes_dir, f"*_{file_name}.json")))
+
+    if change_files:
+        return change_files[-1]
+    else:
+        return None
 
 
 # Define the function to convert a size in bytes to a human-readable string
