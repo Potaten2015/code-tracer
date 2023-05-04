@@ -17,7 +17,7 @@ def init_config_file():
     # Ask for the output folder location
     default_output_folder = os.path.expanduser('~/.code_tracer/')
     output_folder = (
-        input(f'Enter the output folder location (default: {default_output_folder}): ').strip() or default_output_folder
+        input(f"Enter the output folder location (default: {default_output_folder}): ").strip() or default_output_folder
     )
 
     # Check if the path is a file or directory

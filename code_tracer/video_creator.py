@@ -19,6 +19,8 @@ SUPPORTED_LANGUAGES = {
     # Add more language mappings here
 }
 
+VIDEO_VARIATIONS = [("vertical", (2160, 3840)), ("horizontal", (3840, 2160))]
+
 
 def get_language(filename):
     file_extension = os.path.splitext(filename)[-1]
@@ -31,7 +33,7 @@ def highlight_code(code, language):
     return highlight(code, lexer, formatter)
 
 
-def create_image(data):
+def create_image(data, aspect_ratio):
     code_image = np.frombuffer(highlight_code(data["content"], data["language"]), dtype=np.uint8)
     code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
 
@@ -41,10 +43,12 @@ def create_image(data):
     font_scale = 0.8
     font_thickness = 2
     text_size, _ = cv2.getTextSize(text, font, font_scale, font_thickness)
-    img_height, img_width = code_image.shape[:2]
-    padding = 20
-    canvas = np.zeros((img_height + text_size[1] + padding, img_width, 3), dtype=np.uint8)
-    canvas[text_size[1] :, :, :] = code_image
+    canvas = np.zeros((aspect_ratio[0], aspect_ratio[1], 3), dtype=np.uint8)
+    if code_image.shape[0] > aspect_ratio[0] - text_size[1]:
+        code_image = code_image[: aspect_ratio[0] - text_size[1], :, :]
+    if code_image.shape[1] > aspect_ratio[1]:
+        code_image = code_image[:, : aspect_ratio[1], :]
+    canvas[text_size[1] : text_size[1] + code_image.shape[0], : code_image.shape[1], :] = code_image
     cv2.putText(canvas, text, (0, text_size[1]), font, font_scale, (255, 255, 255), font_thickness)
 
     return canvas
@@ -56,32 +60,37 @@ def create_video(config):
     output_dir = os.path.join(output_folder, "videos")
     os.makedirs(output_dir, exist_ok=True)
 
-    images = []
+    clips = [{"name": name, "aspect_ratio": aspect_ratio, "frames": []} for name, aspect_ratio in VIDEO_VARIATIONS]
     for change_filename in sorted(os.listdir(changes_dir)):
         change_filepath = os.path.join(changes_dir, change_filename)
         with open(change_filepath, "r") as f:
             data = json.load(f)
 
-        img = create_image(data)
-        images.append(img)
+        for (
+            i,
+            clip_info,
+        ) in enumerate(clips):
+            img = create_image(data, clip_info["aspect_ratio"])
+            clips[i]["frames"].append(img)
 
-    clip = ImageSequenceClip(images, fps=60)
     max_video_length = config["max_video_length"]
-
-    if clip.duration > max_video_length:
-        clip = clip.subclip(0, max_video_length)
-
-    for aspect_ratio, size in [("vertical", (2160, 3840)), ("horizontal", (3840, 2160))]:
-        resized_clip = clip.resize(size)
-        output_filename = f"{config['name']}_{aspect_ratio}.mp4"
+    for clip_info in clips:
+        clip = ImageSequenceClip(clip_info['frames'], fps=60)
+        if clip.duration > max_video_length:
+            clip = clip.subclip(0, max_video_length)
+        output_filename = f"{config['name']}_{clip_info['aspect_ratio'][0]}x{clip_info['aspect_ratio'][1]}.mp4"
         output_filepath = os.path.join(output_dir, output_filename)
-        resized_clip.write_videofile(output_filepath, fps=60)
+        clip.write_videofile(output_filepath, fps=60)
 
 
 if __name__ == "__main__":
     project_dir = input("Enter the path to the project directory: ")
+    max_video_length_default = 300
+    max_video_length = (
+        input(f"Enter maximum video length (default: {max_video_length_default}s)") or max_video_length_default
+    )
     config_filepath = os.path.join(project_dir, "config.json")
     with open(config_filepath, "r") as f:
         config = json.load(f)
-
+    config["max_video_length"] = int(max_video_length)
     create_video(project_dir, config)
