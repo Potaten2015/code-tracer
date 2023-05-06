@@ -75,6 +75,7 @@ def init_config_file():
 
     ignore_items = input('Enter directories or files to ignore, separated by commas: ').split(',')
     interval = int(input('Enter the interval to check for changes (in seconds): '))
+    video_length = int(input('Enter desired video length (in seconds): '))
     name = input('Enter the project name: ')
 
     # Create the configuration dictionary
@@ -84,6 +85,7 @@ def init_config_file():
         'interval': interval,
         'name': name,
         'output_folder': output_folder,
+        'video_length': video_length,
     }
 
     # Write the configuration to the file
