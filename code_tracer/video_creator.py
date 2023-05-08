@@ -9,6 +9,7 @@ from pygments.styles import get_style_by_name
 from moviepy.editor import ImageSequenceClip
 from utils import Config, logger
 import glob
+from PIL import ImageColor
 
 SUPPORTED_LANGUAGES = {
     ".py": "python",
@@ -24,6 +25,8 @@ SUPPORTED_LANGUAGES = {
 
 VIDEO_VARIATIONS = [("vertical", (2160, 3840)), ("horizontal", (3840, 2160))]
 FPS = 60
+STYLE = get_style_by_name('bw')
+BACKROUND_COLOR = ImageColor.getrgb(STYLE.background_color)
 
 
 def get_language(filename):
@@ -33,8 +36,7 @@ def get_language(filename):
 
 def highlight_code(code, language):
     lexer = get_lexer_by_name(language)
-    style = get_style_by_name('rrt')
-    formatter = ImageFormatter(font_size=24, style=style)
+    formatter = ImageFormatter(font_size=24, style=STYLE)
     return highlight(code, lexer, formatter)
 
 
@@ -43,17 +45,26 @@ def create_image(data, aspect_ratio):
     code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
 
     # Add filename and project name to the image
-    text = f"({data['github_username']}\n{data['project_name']})\n{data['filepath']}\n"
+    text = f"""({data['github_username']}
+    {data['project_name']})
+    {data['filepath']}"""
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.8
     font_thickness = 2
     text_size, _ = cv2.getTextSize(text, font, font_scale, font_thickness)
-    canvas = np.zeros((aspect_ratio[0], aspect_ratio[1], 3), dtype=np.uint8)
-    if code_image.shape[0] > aspect_ratio[0] - text_size[1]:
-        code_image = code_image[: aspect_ratio[0] - text_size[1], :, :]
+    canvas_r = np.full((aspect_ratio[0], aspect_ratio[1]), dtype=np.uint8, fill_value=BACKROUND_COLOR[0])
+    canvas_g = np.full((aspect_ratio[0], aspect_ratio[1]), dtype=np.uint8, fill_value=BACKROUND_COLOR[1])
+    canvas_b = np.full((aspect_ratio[0], aspect_ratio[1]), dtype=np.uint8, fill_value=BACKROUND_COLOR[2])
+    canvas = np.stack([canvas_r, canvas_g, canvas_b], axis=-1)
     if code_image.shape[1] > aspect_ratio[1]:
         code_image = code_image[:, : aspect_ratio[1], :]
-    canvas[text_size[1] : text_size[1] + code_image.shape[0], : code_image.shape[1], :] = code_image
+    lines = len(code_image[1, :, 1])
+    i = 0
+    while lines > 0:
+        cut_image = code_image[
+            : aspect_ratio[0] - text_size[1], code_image.shape[1] * i : code_image.shape[1] * (i + 1), :
+        ]
+        canvas[text_size[1] : text_size[1] + code_image.shape[0], : code_image.shape[1], :] = cut_image
     cv2.putText(canvas, text, (0, text_size[1]), font, font_scale, (0, 0, 0), font_thickness)
 
     return canvas
