@@ -5,6 +5,7 @@ import time
 import glob
 from video_creator import get_language
 from utils import TIME_FORMAT, Config, logger
+from pprint import pprint as pp
 
 
 def is_ignored(path, ignore_items):
@@ -42,30 +43,14 @@ def expand_wildcards(paths, config):
 def remove_ignored(config):
     ignored = config.get("ignore")
 
-    def _expand_ignored(ignored):
-        expanded_ignored = []
-        for ignore_item in ignored:
-            if '*' in ignore_item:
-                new_paths = glob.glob(ignore_item, include_hidden=True)
-                for new_path in new_paths:
-                    if os.path.isdir(new_path):
-                        expanded_ignored += _expand_ignored([os.path.join(new_path, '*')])
-                    else:
-                        expanded_ignored += _expand_ignored([new_path])
-            else:
-                expanded_ignored.append(ignore_item)
-        return expanded_ignored
-
-    ignored = [ignore_item.replace(os.path.sep, "_") for ignore_item in _expand_ignored(ignored)]
-
     output_folder = os.path.join(config.get("output_folder"), config.get("name"))
     changes_dir = os.path.join(output_folder, "changes")
     change_filenames = glob.glob(os.path.join(changes_dir, "*"), recursive=True, include_hidden=True)
     for change_filename in change_filenames:
         for ignore_item in ignored:
-            if ignore_item in change_filename:
+            if fnmatch.fnmatch(change_filename, ignore_item):
                 os.remove(change_filename)
-                logger.info(f"Removed history for {ignore_item}")
+                logger.info(f"Removed history for {change_filename}")
 
 
 def get_items(key, config):
@@ -118,7 +103,7 @@ def watch_directories():
                 if file_has_changed(item, last_modified_times):
                     try:
                         timestamp = time.strftime(TIME_FORMAT)
-                        size_changed = copy_file(item, output_dir, timestamp, project_name)
+                        size_changed = copy_file(item, output_dir, timestamp, project_name, config)
                         total_size += size_changed
                     except UnicodeDecodeError:
                         unreadable_files.append(item)
@@ -158,13 +143,19 @@ def file_has_changed(filepath, last_modified_times):
     return False
 
 
-def copy_file(filepath, output_dir, timestamp, project_name):
+def copy_file(filepath, output_dir, timestamp, project_name, config):
     language = get_language(filepath)
 
     with open(filepath, "r", encoding="utf-8") as f:
         content = f.read()
 
-    data = {"filepath": filepath, "language": language, "content": content, "project_name": project_name}
+    data = {
+        "filepath": filepath,
+        "language": language,
+        "content": content,
+        "project_name": project_name,
+        "github_username": config.get("github_username"),
+    }
 
     changes_dir = os.path.join(output_dir, "changes")
     os.makedirs(changes_dir, exist_ok=True)

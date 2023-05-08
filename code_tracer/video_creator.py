@@ -33,7 +33,7 @@ def get_language(filename):
 
 def highlight_code(code, language):
     lexer = get_lexer_by_name(language)
-    style = get_style_by_name('solarized-dark')
+    style = get_style_by_name('rrt')
     formatter = ImageFormatter(font_size=24, style=style)
     return highlight(code, lexer, formatter)
 
@@ -43,7 +43,7 @@ def create_image(data, aspect_ratio):
     code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
 
     # Add filename and project name to the image
-    text = f"{data['filename']} ({data['project_name']})"
+    text = f"({data['github_username']}\n{data['project_name']})\n{data['filepath']}\n"
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.8
     font_thickness = 2
@@ -54,7 +54,7 @@ def create_image(data, aspect_ratio):
     if code_image.shape[1] > aspect_ratio[1]:
         code_image = code_image[:, : aspect_ratio[1], :]
     canvas[text_size[1] : text_size[1] + code_image.shape[0], : code_image.shape[1], :] = code_image
-    cv2.putText(canvas, text, (0, text_size[1]), font, font_scale, (0, 21, 17), font_thickness)
+    cv2.putText(canvas, text, (0, text_size[1]), font, font_scale, (0, 0, 0), font_thickness)
 
     return canvas
 
@@ -74,7 +74,7 @@ def create_video(config):
             i,
             clip_info,
         ) in enumerate(clips):
-            logger.info(f"Processing {change_file['filename']} for {clip_info['name']}")
+            logger.info(f"Processing {change_file['filepath']} for {clip_info['name']}")
             img = create_image(change_file, clip_info["aspect_ratio"])
             clips[i]["frames"].extend([img] * clip_frames)
 

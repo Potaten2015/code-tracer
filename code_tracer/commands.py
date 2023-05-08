@@ -17,7 +17,7 @@ def init_config_file():
     # Ask for the output folder location
     default_output_folder = os.path.expanduser('~/.code_tracer/')
     output_folder = (
-        input(f"Enter the output folder location (default: {default_output_folder}): ").strip() or default_output_folder
+        input(f'Enter the output folder location (default: {default_output_folder}): ').strip() or default_output_folder
     )
 
     # Check if the path is a file or directory
@@ -76,6 +76,7 @@ def init_config_file():
     ignore_items = input('Enter directories or files to ignore, separated by commas: ').split(',')
     interval = int(input('Enter the interval to check for changes (in seconds): '))
     video_length = int(input('Enter desired video length (in seconds): '))
+    github_username = input('Enter GitHub username: ')
     name = input('Enter the project name: ')
 
     # Create the configuration dictionary
@@ -86,6 +87,7 @@ def init_config_file():
         'name': name,
         'output_folder': output_folder,
         'video_length': video_length,
+        'github_username': github_username,
     }
 
     # Write the configuration to the file
