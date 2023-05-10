@@ -64,7 +64,7 @@ def get_items(key, config):
 def watch_directories():
     # Load the configuration file
     project_dir = input('Enter the path to the project directory: ')
-    config_filepath = os.path.join(project_dir, 'config.json')
+    config_filepath = os.path.join(project_dir, 'tracer.json')
     config = Config(config_filepath)
 
     config.set("project_dir", project_dir)

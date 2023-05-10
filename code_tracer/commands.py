@@ -2,7 +2,8 @@ import argparse
 import json
 import os
 import glob
-import video_creator
+from video_creator import create_video
+from utils import Config
 
 
 def init_config_file():
@@ -91,7 +92,7 @@ def init_config_file():
     }
 
     # Write the configuration to the file
-    config_filepath = os.path.join(project_dir, 'config.json')
+    config_filepath = os.path.join(project_dir, 'tracer.json')
     with open(config_filepath, 'w') as f:
         json.dump(config, f, indent=4)
 
@@ -100,20 +101,19 @@ def init_config_file():
 
 def generate_video():
     project_dir = input("Enter the path to the project directory: ")
-    config_filepath = os.path.join(project_dir, "config.json")
-    with open(config_filepath, "r") as f:
-        config = json.load(f)
+    config_filepath = os.path.join(project_dir, "tracer.json")
+    config = Config(config_filepath)
 
-    video_creator.create_video(config)
+    create_video(config)
 
 
 if __name__ == '__main__':
     # Create the argument parser
-    parser = argparse.ArgumentParser(description='CLI tool to initialize the config.json file.')
+    parser = argparse.ArgumentParser(description='CLI tool to initialize the tracer.json file.')
 
     # Add the init subcommand
     subparsers = parser.add_subparsers(dest='command')
-    init_parser = subparsers.add_parser('init', help='Initialize the config.json file.')
+    init_parser = subparsers.add_parser('init', help='Initialize the tracer.json file.')
     generate_video_parser = subparsers.add_parser(
         "generate_video", help="Generate a video from the saved code changes."
     )
