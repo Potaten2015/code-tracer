@@ -16,10 +16,10 @@ DEFAULTS = {
     "gifs": False,
     "group_by_file": False,
     "video": True,
-    "resolutions": {
+    "resolutions": [
         {"name": "landscape", "dimensions": [4096, 2160]},
         {"name": "portrait", "dimensions": [2160, 4096]},
-    },
+    ],
     "gif_width": 500,
     "gif_height": 500,
 }

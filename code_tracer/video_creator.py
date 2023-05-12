@@ -118,9 +118,11 @@ def create_video(config):
     if config.get("gifs", True):
         gif_clips = group_by_file(change_files)
         gif_clips = [
-            "name": filepath,
-            "dimensions": (config.get("gif_width", 500), config.get("gif_height", 500)),
-            "frames": []
+            {
+                "name": filepath,
+                "dimensions": (config.get("gif_width", 500), config.get("gif_height", 500)),
+                "frames": [],
+            }
             for filepath, change_file in gif_clips.items()
         ]
         for gif_clip in gif_clips:
