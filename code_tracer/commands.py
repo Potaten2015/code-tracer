@@ -2,13 +2,14 @@ import argparse
 import json
 import os
 import glob
-from video_creator import create_video
-from utils import Config
+from video_creator import create_media
+from utils import logger
 
 
 def init_config_file():
     # Prompt the user to select a project directory
     project_dir = input('Enter the path to the project directory: ')
+    project_dir = os.path.expanduser(project_dir)
 
     # Check if the path is valid
     if not os.path.exists(project_dir):
@@ -16,9 +17,9 @@ def init_config_file():
         return
 
     # Ask for the output folder location
-    default_output_folder = os.path.expanduser('~/.code_tracer/')
-    output_folder = (
-        input(f'Enter the output folder location (default: {default_output_folder}): ').strip() or default_output_folder
+    default_output_dir = os.path.join(project_dir, 'output')
+    output_dir = (
+        input(f'Enter the output folder location (default: {default_output_dir}): ').strip() or default_output_dir
     )
 
     # Check if the path is a file or directory
@@ -86,7 +87,7 @@ def init_config_file():
         'ignore': [item.strip() for item in ignore_items],
         'interval': interval,
         'name': name,
-        'output_folder': output_folder,
+        'output_dir': output_dir,
         'video_length': video_length,
         'github_username': github_username,
     }
@@ -96,15 +97,11 @@ def init_config_file():
     with open(config_filepath, 'w') as f:
         json.dump(config, f, indent=4)
 
-    print('Config file created successfully!')
+    logger.info("Configuration file created successfully.")
 
 
 def generate_video():
-    project_dir = input("Enter the path to the project directory: ")
-    config_filepath = os.path.join(project_dir, "tracer.json")
-    config = Config(config_filepath)
-
-    create_video(config)
+    create_media()
 
 
 if __name__ == '__main__':

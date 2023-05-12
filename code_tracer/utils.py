@@ -1,38 +1,19 @@
 import logging
 import json
+from constants import DEFAULTS
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging
-
-TIME_FORMAT = '%Y.%m.%d-%H:%M:%S'
-DEFAULTS = {
-    "ignore": [
-        "*node_modules*",
-        "*venv*",
-        "*__pycache__*",
-    ],
-    "interval": 5,
-    "video_length": 60,
-    "gifs": False,
-    "group_by_file": False,
-    "video": True,
-    "resolutions": [
-        {"name": "landscape", "dimensions": [4096, 2160]},
-        {"name": "portrait", "dimensions": [2160, 4096]},
-    ],
-    "gif_width": 500,
-    "gif_height": 500,
-}
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
 
 class Config:
     def __init__(self, filepath) -> None:
-        self.load(filepath)
+        self.filepath = filepath
+        self.load(self.filepath)
+        self._add_defaults()
 
-    def load(self, filepath):
-        logger.info(f"Loading config from {filepath}")
-        with open(filepath, 'r') as f:
-            self.config = json.load(f)
+    def _add_defaults(self):
         complete = True
         for key, value in DEFAULTS.items():
             if key not in self.config:
@@ -40,16 +21,23 @@ class Config:
                 logger.info(f"Key {key} not found in config, using default value {value}")
                 self.config[key] = value
         if not complete:
-            self.write(filepath)
+            self.write(self.filepath)
+
+    def load(self, filepath):
+        logger.info(f"Loading config from {filepath}")
+        with open(filepath, 'r') as f:
+            self.config = json.load(f)
+        if self.config.get("log_level"):
+            logger.setLevel(self.config.get("log_level").upper())
 
     def get(self, key, default=None):
         result = self.config.get(key)
-        if result:
+        if result is not None:
             return result
         elif default:
             return default
         else:
-            raise KeyError(f"Key {key} not found in config and no default provided")
+            raise KeyError(f"Key '{key}' not found in config and no default provided")
 
     def write(self, filepath):
         logger.info(f"Writing config to {filepath}")

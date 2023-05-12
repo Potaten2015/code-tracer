@@ -4,8 +4,8 @@ import json
 import time
 import glob
 from video_creator import get_language
-from utils import TIME_FORMAT, Config, logger
-from pprint import pprint as pp
+from utils import Config, logger
+from constants import TIME_FORMAT
 
 
 def is_ignored(path, ignore_items):
@@ -43,8 +43,8 @@ def expand_wildcards(paths, config):
 def remove_ignored(config):
     ignored = config.get("ignore")
 
-    output_folder = os.path.join(config.get("output_folder"), config.get("name"))
-    changes_dir = os.path.join(output_folder, "changes")
+    output_dir = os.path.join(config.get("output_dir"))
+    changes_dir = os.path.join(output_dir, "changes")
     change_filenames = glob.glob(os.path.join(changes_dir, "*"), recursive=True, include_hidden=True)
     for change_filename in change_filenames:
         for ignore_item in ignored:
@@ -60,15 +60,12 @@ def get_items(key, config):
     return items
 
 
-# Define the function to watch the directories/files
 def watch_directories():
-    # Load the configuration file
     project_dir = input('Enter the path to the project directory: ')
     config_filepath = os.path.join(project_dir, 'tracer.json')
     config = Config(config_filepath)
 
     config.set("project_dir", project_dir)
-    # Get the directories/files to watch/ignore
     watch_items = get_items('watch', config)
     remove_ignored(config)
     logger.info(f'Watching {len(watch_items)} items.')
@@ -77,10 +74,10 @@ def watch_directories():
     project_name = config.get("name")
 
     # Get the output folder from the config
-    output_folder = config.get("output_folder")
+    output_dir = config.get("output_dir")
 
     # Create the output directory if it doesn't exist
-    output_dir = os.path.expanduser(os.path.join(output_folder, project_name))
+    output_dir = os.path.expanduser(output_dir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -149,20 +146,20 @@ def copy_file(filepath, output_dir, timestamp, project_name, config):
     with open(filepath, "r", encoding="utf-8") as f:
         content = f.read()
 
-    data = {
-        "filepath": filepath,
-        "language": language,
-        "content": content,
-        "project_name": project_name,
-        "github_username": config.get("github_username"),
-    }
-
     changes_dir = os.path.join(output_dir, "changes")
     os.makedirs(changes_dir, exist_ok=True)
 
     updated_filepath = filepath.replace(os.path.sep, "_")
     change_filename = f"{timestamp}_{updated_filepath}.json"
     change_filepath = os.path.join(changes_dir, change_filename)
+
+    data = {
+        "filepath": updated_filepath,
+        "language": language,
+        "content": content,
+        "project_name": project_name,
+        "github_username": config.get("github_username"),
+    }
 
     with open(change_filepath, "w", encoding="utf-8") as f:
         json.dump(data, f)

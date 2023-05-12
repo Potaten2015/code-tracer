@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import cv2
 import numpy as np
@@ -10,7 +11,7 @@ from moviepy.editor import ImageSequenceClip
 from utils import Config, logger
 import glob
 from PIL import ImageColor
-from itertools import groupby
+import multiprocessing
 
 SUPPORTED_LANGUAGES = {
     ".py": "python",
@@ -24,7 +25,6 @@ SUPPORTED_LANGUAGES = {
     # Add more language mappings here
 }
 
-FPS = 60
 STYLE = get_style_by_name('bw')
 BACKROUND_COLOR = ImageColor.getrgb(STYLE.background_color)
 
@@ -47,11 +47,26 @@ def highlight_code(code, language, font_size=24):
     return highlight(code, lexer, formatter)
 
 
+def group_by_file(changes_files, flatten=False):
+    grouped_changes = {}
+    for change_file in changes_files:
+        if change_file["filepath"] in grouped_changes:
+            grouped_changes[change_file["filepath"]].append(change_file)
+        else:
+            grouped_changes[change_file["filepath"]] = [change_file]
+
+    if flatten:
+        new_changes_files = []
+        for _, changes in grouped_changes.items():
+            new_changes_files.extend(changes)
+        return new_changes_files
+
+    return grouped_changes
+
+
 def create_image(data, dimensions):
     # Add filepath and project name to the image
-    text = f"""({data['github_username']}
-    {data['project_name']})
-    {data['filepath']}"""
+    text = f"({data['github_username']}::{data['project_name']}):{data['filepath']}"
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.8
     font_thickness = 2
@@ -64,6 +79,8 @@ def create_image(data, dimensions):
     max_code_height = dimensions[1] - text_size[1]
     font_size = 24
 
+    wrap_width = 0
+
     while too_big:
         code_image = np.frombuffer(
             highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
@@ -71,6 +88,39 @@ def create_image(data, dimensions):
         code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
         code_image_width = code_image.shape[1]
         code_image_height = code_image.shape[0]
+        if code_image_height > max_code_height:
+            wrap_count = math.ceil(code_image_height / max_code_height)
+            wrap_width = wrap_count * code_image_width
+            if wrap_width > dimensions[0]:
+                logger.debug(f"Code too big, reducing font size from {font_size} to {font_size - 2}")
+                font_size = font_size - 2
+            else:
+                too_big = False
+        else:
+            too_big = False
+
+    size_history = [font_size]
+    while too_small:
+        if wrap_width > dimensions[0]:
+            too_small = False
+            font_size = size_history[-1]
+            code_image = np.frombuffer(
+                highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
+            )
+            code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
+        else:
+            logger.debug(f"Code too small, increasing font size from {font_size} to {font_size + 1}")
+            logger.debug(f"Code too small {wrap_width} < {dimensions[0]}")
+            size_history.append(font_size)
+            font_size = font_size + 4
+            code_image = np.frombuffer(
+                highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
+            )
+            code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
+            code_image_width = code_image.shape[1]
+            code_image_height = code_image.shape[0]
+            wrap_count = math.ceil(code_image_height / max_code_height)
+            wrap_width = wrap_count * code_image_width
 
     canvas_r = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[0])
     canvas_g = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[1])
@@ -91,43 +141,62 @@ def create_image(data, dimensions):
                 :,
             ] = code_image_slice
         except:
-            print("error")
+            logger.error(f"Unable to process file fully: {data['filepath']}")
         i = i + 1
     cv2.putText(canvas, text, (0, text_size[1]), font, font_scale, (0, 0, 0), font_thickness)
 
     return canvas
 
 
-def create_video(config):
-    output_folder = os.path.join(config.get("output_folder"), config.get("name"))
-    changes_dir = os.path.join(output_folder, "changes")
-    change_files = get_change_files(changes_dir, group_by_file=config.get("group_by_file", False))
-    output_dir = os.path.join(output_folder, "videos")
-    clip_frames = int(config.get("video_length", 300) / len(change_files) * FPS)
+def create_gif(config, gif_clip, gif_output_dir):
+    logger.info(f"Processing gif for {gif_clip['name']}")
+    gif_frames = int(config.get("gif_length", 5) / len(gif_clip["files"]) * config.get("gif_fps"))
+    for change_file in gif_clip["files"]:
+        img = create_image(change_file, gif_clip["dimensions"])
+        gif_clip["frames"].extend([img] * gif_frames)
+    clip = ImageSequenceClip(gif_clip["frames"], fps=config.get("gif_fps"))
+    output_filename = f"{config.get('name')}_{gif_clip['name']}.gif"
+    output_filepath = os.path.join(gif_output_dir, output_filename)
+    clip.write_gif(output_filepath, fps=config.get("gif_fps"))
 
-    os.makedirs(output_dir, exist_ok=True)
 
-    if config.get("group_by_file", True):
-        change_files = group_by_file(change_files, flatten=True)
+def create_gifs(config, change_files):
+    gif_output_dir = os.path.join(config.get("output_dir"), "gifs")
+
+    os.makedirs(gif_output_dir, exist_ok=True)
+
+    gif_clips = group_by_file(change_files)
+    gif_clips = [
+        {
+            "name": filepath,
+            "dimensions": (config.get("gif_width", 500), config.get("gif_height", 500)),
+            "frames": [],
+            "files": change_files,
+            "adjusted_font_size": None,
+        }
+        for filepath, change_files in gif_clips.items()
+    ]
+
+    processes = []
+    for gif_clip in gif_clips:
+        p = multiprocessing.Process(target=create_gif, args=(config, gif_clip, gif_output_dir))
+        processes.append(p)
+        p.start()
+
+    for p in processes:
+        p.join()
+
+
+def create_video(config, change_files):
+    video_frames = int(config.get("video_length", 300) / len(change_files) * config.get("video_fps"))
+    video_output_dir = os.path.join(config.get("output_dir"), "videos")
+
+    os.makedirs(video_output_dir, exist_ok=True)
 
     clips = [
         {"name": resolution["name"], "dimensions": resolution["dimensions"], "frames": []}
         for resolution in config.get("resolutions")
     ]
-
-    if config.get("gifs", True):
-        gif_clips = group_by_file(change_files)
-        gif_clips = [
-            {
-                "name": filepath,
-                "dimensions": (config.get("gif_width", 500), config.get("gif_height", 500)),
-                "frames": [],
-            }
-            for filepath, change_file in gif_clips.items()
-        ]
-        for gif_clip in gif_clips:
-            ## TODO: Create gifs
-            pass
 
     for change_file in change_files:
         for (
@@ -136,37 +205,13 @@ def create_video(config):
         ) in enumerate(clips):
             logger.info(f"Processing {change_file['filepath']} for {clip_info['name']}")
             img = create_image(change_file, clip_info["dimensions"])
-            clips[i]["frames"].extend([img] * clip_frames)
+            clips[i]["frames"].extend([img] * video_frames)
 
     for clip_info in clips:
-        clip = ImageSequenceClip(clip_info['frames'], fps=FPS)
+        clip = ImageSequenceClip(clip_info['frames'], fps=config.get("video_fps"))
         output_filename = f"{config.get('name')}_{clip_info['dimensions'][0]}x{clip_info['dimensions'][1]}.mp4"
-        output_filepath = os.path.join(output_dir, output_filename)
-        clip.write_videofile(output_filepath, fps=FPS)
-
-
-def group_by_file(changes_files, flatten=False):
-    grouped_changes = {}
-    for change_file in changes_files:
-        if change_file["filepath"] in grouped_changes:
-            grouped_changes[change_file["filepath"]].append(change_file)
-        else:
-            grouped_changes[change_file["filepath"]] = [change_file]
-
-    if flatten:
-        new_changes_files = []
-        for _, changes in grouped_changes.items():
-            new_changes_files.extend(changes)
-        return new_changes_files
-
-    return grouped_changes
-
-
-if __name__ == "__main__":
-    project_dir = input("Enter the path to the project directory: ")
-    config_filepath = os.path.join(project_dir, "tracer.json")
-    config = Config(config_filepath)
-    create_video(project_dir, config)
+        output_filepath = os.path.join(video_output_dir, output_filename)
+        clip.write_videofile(output_filepath, fps=config.get("video_fps"))
 
 
 def get_change_files(changes_dir):
@@ -184,3 +229,25 @@ def get_change_files(changes_dir):
         return change_files
     else:
         return None
+
+
+def create_media():
+    project_dir = input("Enter the path to the project directory: ")
+    config_filepath = os.path.join(project_dir, "tracer.json")
+    config = Config(config_filepath)
+
+    changes_dir = os.path.join(config.get("output_dir"), "changes")
+    change_files = get_change_files(changes_dir)
+
+    if config.get("group_by_file", True):
+        change_files = group_by_file(change_files, flatten=True)
+
+    if config.get("gifs", False):
+        create_gifs(config, change_files)
+
+    if config.get("video", False):
+        create_video(config, change_files)
+
+
+if __name__ == "__main__":
+    create_media()
