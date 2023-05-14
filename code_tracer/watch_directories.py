@@ -49,8 +49,11 @@ def remove_ignored(config):
     for change_filename in change_filenames:
         for ignore_item in ignored:
             if fnmatch.fnmatch(change_filename, ignore_item):
-                os.remove(change_filename)
-                logger.info(f"Removed history for {change_filename}")
+                try:
+                    os.remove(change_filename)
+                    logger.info(f"Removed history for {change_filename}")
+                except:
+                    logger.warning(f"Unable to remove history file for {change_filename}")
 
 
 def get_items(key, config):
