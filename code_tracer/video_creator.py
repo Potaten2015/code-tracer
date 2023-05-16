@@ -64,7 +64,7 @@ def group_by_file(changes_files, flatten=False):
     return grouped_changes
 
 
-def create_image(data, dimensions):
+def create_image(data, dimensions, final_font_size=None):
     # Add filepath and project name to the image
     text = f"({data['github_username']}::{data['project_name']}):{data['filepath']}"
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -81,46 +81,53 @@ def create_image(data, dimensions):
 
     wrap_width = 0
 
-    while too_big:
+    if len(final_font_size) > 0:
         code_image = np.frombuffer(
-            highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
+            highlight_code(extended_content, data["language"], font_size=final_font_size[-1]), dtype=np.uint8
         )
         code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
-        code_image_width = code_image.shape[1]
-        code_image_height = code_image.shape[0]
-        if code_image_height > max_code_height:
-            wrap_count = math.ceil(code_image_height / max_code_height)
-            wrap_width = wrap_count * code_image_width
-            if wrap_width > dimensions[0]:
-                logger.debug(f"Code too big, reducing font size from {font_size} to {font_size - 2}")
-                font_size = font_size - 2
-            else:
-                too_big = False
-        else:
-            too_big = False
-
-    size_history = [font_size]
-    while too_small:
-        if wrap_width > dimensions[0]:
-            too_small = False
-            font_size = size_history[-1]
-            code_image = np.frombuffer(
-                highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
-            )
-            code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
-        else:
-            logger.debug(f"Code too small, increasing font size from {font_size} to {font_size + 1}")
-            logger.debug(f"Code too small {wrap_width} < {dimensions[0]}")
-            size_history.append(font_size)
-            font_size = font_size + 4
+    else:
+        while too_big:
             code_image = np.frombuffer(
                 highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
             )
             code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
             code_image_width = code_image.shape[1]
             code_image_height = code_image.shape[0]
-            wrap_count = math.ceil(code_image_height / max_code_height)
-            wrap_width = wrap_count * code_image_width
+            if code_image_height > max_code_height:
+                wrap_count = math.ceil(code_image_height / max_code_height)
+                wrap_width = wrap_count * code_image_width
+                if wrap_width > dimensions[0]:
+                    logger.debug(f"Code too big, reducing font size from {font_size} to {font_size - 2}")
+                    font_size = font_size - 2
+                else:
+                    too_big = False
+            else:
+                too_big = False
+
+        size_history = [font_size]
+        while too_small:
+            if wrap_width > dimensions[0]:
+                too_small = False
+                font_size = size_history[-1]
+                final_font_size.append(font_size)
+                code_image = np.frombuffer(
+                    highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
+                )
+                code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
+            else:
+                logger.debug(f"Code too small, increasing font size from {font_size} to {font_size + 1}")
+                logger.debug(f"Code too small {wrap_width} < {dimensions[0]}")
+                size_history.append(font_size)
+                font_size = font_size + 4
+                code_image = np.frombuffer(
+                    highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
+                )
+                code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
+                code_image_width = code_image.shape[1]
+                code_image_height = code_image.shape[0]
+                wrap_count = math.ceil(code_image_height / max_code_height)
+                wrap_width = wrap_count * code_image_width
 
     canvas_r = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[0])
     canvas_g = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[1])
@@ -151,8 +158,9 @@ def create_image(data, dimensions):
 def create_gif(config, gif_clip, gif_output_dir):
     logger.info(f"Processing gif for {gif_clip['name']}")
     gif_frames = int(config.get("gif_length", 5) / len(gif_clip["files"]) * config.get("gif_fps"))
+    final_font_size = []
     for change_file in gif_clip["files"]:
-        img = create_image(change_file, gif_clip["dimensions"])
+        img = create_image(change_file, gif_clip["dimensions"], final_font_size)
         gif_clip["frames"].extend([img] * gif_frames)
     clip = ImageSequenceClip(gif_clip["frames"], fps=config.get("gif_fps"))
     output_filename = f"{config.get('name')}_{gif_clip['name']}.gif"
