@@ -64,7 +64,7 @@ def group_by_file(changes_files, flatten=False):
     return grouped_changes
 
 
-def create_image(data, dimensions, final_font_size=None):
+def create_image(data, dimensions, final_font_size={}):
     # Add filepath and project name to the image
     text = f"({data['github_username']}::{data['project_name']}):{data['filepath']}"
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -74,66 +74,46 @@ def create_image(data, dimensions, final_font_size=None):
 
     extended_content = data["content"] + "\n" * (data["max_lines"] - data["total_lines"])
 
-    too_big = True
-    too_small = True
     max_code_height = dimensions[1] - text_size[1]
-    font_size = 24
 
     wrap_width = 0
 
-    if len(final_font_size) > 0:
+    high = 400
+    low = 1
+    precision = 0.1
+
+    if final_font_size.get(data["filepath"]):
         code_image = np.frombuffer(
-            highlight_code(extended_content, data["language"], font_size=final_font_size[-1]), dtype=np.uint8
+            highlight_code(extended_content, data["language"], font_size=final_font_size.get(data["filepath"])),
+            dtype=np.uint8,
         )
         code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
     else:
-        while too_big:
+        while high - low > precision:
+            font_size = (high + low) / 2
+            logger.debug(f"Trying font size: {font_size}")
             code_image = np.frombuffer(
                 highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
             )
             code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
             code_image_width = code_image.shape[1]
             code_image_height = code_image.shape[0]
-            if code_image_height > max_code_height:
-                wrap_count = math.ceil(code_image_height / max_code_height)
-                wrap_width = wrap_count * code_image_width
-                if wrap_width > dimensions[0]:
-                    logger.debug(f"Code too big, reducing font size from {font_size} to {font_size - 2}")
-                    font_size = font_size - 2
-                else:
-                    too_big = False
-            else:
-                too_big = False
+            wrap_count = math.ceil(code_image_height / max_code_height)
+            wrap_width = wrap_count * code_image_width
 
-        size_history = [font_size]
-        while too_small:
             if wrap_width > dimensions[0]:
-                too_small = False
-                font_size = size_history[-1]
-                final_font_size.append(font_size)
-                code_image = np.frombuffer(
-                    highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
-                )
-                code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
+                high = font_size
             else:
-                logger.debug(f"Code too small, increasing font size from {font_size} to {font_size + 1}")
-                logger.debug(f"Code too small {wrap_width} < {dimensions[0]}")
-                size_history.append(font_size)
-                font_size = font_size + 4
-                code_image = np.frombuffer(
-                    highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
-                )
-                code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
-                code_image_width = code_image.shape[1]
-                code_image_height = code_image.shape[0]
-                wrap_count = math.ceil(code_image_height / max_code_height)
-                wrap_width = wrap_count * code_image_width
+                low = font_size  # increase the font size
+
+        final_font_size[data["filepath"]] = font_size
 
     canvas_r = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[0])
     canvas_g = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[1])
     canvas_b = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[2])
     canvas = np.stack([canvas_r, canvas_g, canvas_b], axis=-1)
     code_image_slice = code_image
+    code_image_width = code_image.shape[1]
     i = 0
     while code_image_slice.size != 0:
         code_image_slice = code_image[i * max_code_height : (i + 1) * max_code_height, :, :]
@@ -156,13 +136,14 @@ def create_image(data, dimensions, final_font_size=None):
 
 
 def create_gif(config, gif_clip, gif_output_dir):
+    frames = []
     logger.info(f"Processing gif for {gif_clip['name']}")
     gif_frames = int(config.get("gif_length", 5) / len(gif_clip["files"]) * config.get("gif_fps"))
-    final_font_size = []
+    final_font_size = {}
     for change_file in gif_clip["files"]:
         img = create_image(change_file, gif_clip["dimensions"], final_font_size)
-        gif_clip["frames"].extend([img] * gif_frames)
-    clip = ImageSequenceClip(gif_clip["frames"], fps=config.get("gif_fps"))
+        frames.extend([img] * gif_frames)
+    clip = ImageSequenceClip(frames, fps=config.get("gif_fps"))
     output_filename = f"{config.get('name')}_{gif_clip['name']}.gif"
     output_filepath = os.path.join(gif_output_dir, output_filename)
     clip.write_gif(output_filepath, fps=config.get("gif_fps"))
@@ -178,9 +159,7 @@ def create_gifs(config, change_files):
         {
             "name": filepath,
             "dimensions": (config.get("gif_width", 500), config.get("gif_height", 500)),
-            "frames": [],
             "files": change_files,
-            "adjusted_font_size": None,
         }
         for filepath, change_files in gif_clips.items()
     ]
@@ -205,14 +184,14 @@ def create_video(config, change_files):
         {"name": resolution["name"], "dimensions": resolution["dimensions"], "frames": []}
         for resolution in config.get("resolutions")
     ]
-
-    for change_file in change_files:
-        for (
-            i,
-            clip_info,
-        ) in enumerate(clips):
+    for (
+        i,
+        clip_info,
+    ) in enumerate(clips):
+        final_font_size = {}
+        for change_file in change_files:
             logger.info(f"Processing {change_file['filepath']} for {clip_info['name']}")
-            img = create_image(change_file, clip_info["dimensions"])
+            img = create_image(change_file, clip_info["dimensions"], final_font_size)
             clips[i]["frames"].extend([img] * video_frames)
 
     for clip_info in clips:
@@ -232,6 +211,7 @@ def get_change_files(changes_dir):
     for change_file in change_files:
         max_lines[change_file["filepath"]] = max(max_lines[change_file["filepath"]], change_file["total_lines"])
     change_files = [{**change_file, "max_lines": max_lines[change_file["filepath"]]} for change_file in change_files]
+    change_files = [change_file for change_file in change_files if change_file["max_lines"] > 0]
 
     if change_files:
         return change_files
