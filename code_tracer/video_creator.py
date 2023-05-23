@@ -13,25 +13,9 @@ import glob
 from PIL import ImageColor
 import multiprocessing
 
-SUPPORTED_LANGUAGES = {
-    ".py": "python",
-    ".js": "javascript",
-    ".jsx": "javascript",
-    ".ts": "typescript",
-    ".tsx": "typescript",
-    ".json": "json",
-    ".md": "markdown",
-    ".html": "html",
-    # Add more language mappings here
-}
 
 STYLE = get_style_by_name('bw')
 BACKROUND_COLOR = ImageColor.getrgb(STYLE.background_color)
-
-
-def get_language(filepath):
-    file_extension = os.path.splitext(filepath)[-1]
-    return SUPPORTED_LANGUAGES.get(file_extension, "text")
 
 
 def highlight_code(code, language, font_size=24):
@@ -64,7 +48,7 @@ def group_by_file(changes_files, flatten=False):
     return grouped_changes
 
 
-def create_image(data, dimensions, final_font_size={}):
+def create_image(data, dimensions, final_font_size):
     # Add filepath and project name to the image
     text = f"({data['github_username']}::{data['project_name']}):{data['filepath']}"
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -76,37 +60,11 @@ def create_image(data, dimensions, final_font_size={}):
 
     max_code_height = dimensions[1] - text_size[1]
 
-    wrap_width = 0
-
-    high = 400
-    low = 1
-    precision = 0.1
-
-    if final_font_size.get(data["filepath"]):
-        code_image = np.frombuffer(
-            highlight_code(extended_content, data["language"], font_size=final_font_size.get(data["filepath"])),
-            dtype=np.uint8,
-        )
-        code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
-    else:
-        while high - low > precision:
-            font_size = (high + low) / 2
-            logger.debug(f"Trying font size: {font_size}")
-            code_image = np.frombuffer(
-                highlight_code(extended_content, data["language"], font_size=font_size), dtype=np.uint8
-            )
-            code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
-            code_image_width = code_image.shape[1]
-            code_image_height = code_image.shape[0]
-            wrap_count = math.ceil(code_image_height / max_code_height)
-            wrap_width = wrap_count * code_image_width
-
-            if wrap_width > dimensions[0]:
-                high = font_size
-            else:
-                low = font_size  # increase the font size
-
-        final_font_size[data["filepath"]] = font_size
+    code_image = np.frombuffer(
+        highlight_code(extended_content, data["language"], font_size=final_font_size),
+        dtype=np.uint8,
+    )
+    code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
 
     canvas_r = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[0])
     canvas_g = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[1])
@@ -139,9 +97,8 @@ def create_gif(config, gif_clip, gif_output_dir):
     frames = []
     logger.info(f"Processing gif for {gif_clip['name']}")
     gif_frames = int(config.get("gif_length", 5) / len(gif_clip["files"]) * config.get("gif_fps"))
-    final_font_size = {}
     for change_file in gif_clip["files"]:
-        img = create_image(change_file, gif_clip["dimensions"], final_font_size)
+        img = create_image(change_file, gif_clip["dimensions"], change_file["font_size"]["gif"])
         frames.extend([img] * gif_frames)
     clip = ImageSequenceClip(frames, fps=config.get("gif_fps"))
     output_filename = f"{config.get('name')}_{gif_clip['name']}.gif"
@@ -188,10 +145,9 @@ def create_video(config, change_files):
         i,
         clip_info,
     ) in enumerate(clips):
-        final_font_size = {}
         for change_file in change_files:
             logger.info(f"Processing {change_file['filepath']} for {clip_info['name']}")
-            img = create_image(change_file, clip_info["dimensions"], final_font_size)
+            img = create_image(change_file, clip_info["dimensions"], change_file["font_size"][clip_info["name"]])
             clips[i]["frames"].extend([img] * video_frames)
 
     for clip_info in clips:
@@ -201,17 +157,89 @@ def create_video(config, change_files):
         clip.write_videofile(output_filepath, fps=config.get("video_fps"))
 
 
-def get_change_files(changes_dir):
+def get_change_files(config):
+    changes_dir = os.path.join(config.get("output_dir"), "changes")
     change_filenames = sorted(glob.glob(os.path.join(changes_dir, f"*")))
     change_files = [json.load(open(change_filename, "r")) for change_filename in change_filenames]
     change_files = [
         {**change_file, "total_lines": len(change_file["content"].split("\n"))} for change_file in change_files
     ]
     max_lines = {filepath: 0 for filepath in set([change_file["filepath"] for change_file in change_files])}
-    for change_file in change_files:
+    max_chars = {filepath: 0 for filepath in set([change_file["filepath"] for change_file in change_files])}
+    max_char_indexes = {}
+    for file_index, change_file in enumerate(change_files):
         max_lines[change_file["filepath"]] = max(max_lines[change_file["filepath"]], change_file["total_lines"])
-    change_files = [{**change_file, "max_lines": max_lines[change_file["filepath"]]} for change_file in change_files]
+        file_max_chars = 0
+        for line in change_file["content"].split("\n"):
+            file_max_chars = max(len(line), file_max_chars)
+        if file_max_chars > max_chars[change_file["filepath"]]:
+            max_chars[change_file["filepath"]] = file_max_chars
+            max_char_indexes[change_file["filepath"]] = file_index
+
+    change_files = [
+        {**change_file, "max_lines": max_lines[change_file["filepath"]], "font_size": {}}
+        for change_file in change_files
+    ]
     change_files = [change_file for change_file in change_files if change_file["max_lines"] > 0]
+
+    for filepath, max_char_index in max_char_indexes.items():
+        change_file = change_files[max_char_index]
+        text = f"({change_file['github_username']}::{change_file['project_name']}):{filepath}"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.8
+        font_thickness = 2
+        text_size, _ = cv2.getTextSize(text, font, font_scale, font_thickness)
+
+        extended_content = change_file["content"] + "\n" * (change_file["max_lines"] - change_file["total_lines"])
+
+        if config.get("video"):
+            for resolution in config.get("resolutions"):
+                max_code_height = resolution["dimensions"][1] - text_size[1]
+                high = 400
+                low = 1
+                precision = 0.1
+                font_size = (high + low) / 2
+                while high - low > precision:
+                    font_size = (high + low) / 2
+                    logger.debug(f"Trying font size: {font_size}")
+                    code_image = np.frombuffer(
+                        highlight_code(extended_content, change_file["language"], font_size=font_size), dtype=np.uint8
+                    )
+                    code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
+                    code_image_width = code_image.shape[1]
+                    code_image_height = code_image.shape[0]
+                    wrap_count = math.ceil(code_image_height / max_code_height)
+                    wrap_width = wrap_count * code_image_width
+
+                    if wrap_width > resolution["dimensions"][0]:
+                        high = font_size
+                    else:
+                        low = font_size  # increase the font size
+                change_file["font_size"][resolution["name"]] = font_size
+
+        if config.get("gifs"):
+            max_code_height = config.get("gif_height") - text_size[1]
+            high = 400
+            low = 1
+            precision = 0.1
+            font_size = (high + low) / 2
+            while high - low > precision:
+                font_size = (high + low) / 2
+                logger.debug(f"Trying font size: {font_size}")
+                code_image = np.frombuffer(
+                    highlight_code(extended_content, change_file["language"], font_size=font_size), dtype=np.uint8
+                )
+                code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
+                code_image_width = code_image.shape[1]
+                code_image_height = code_image.shape[0]
+                wrap_count = math.ceil(code_image_height / max_code_height)
+                wrap_width = wrap_count * code_image_width
+
+                if wrap_width > config.get("gif_width"):
+                    high = font_size
+                else:
+                    low = font_size  # increase the font size
+            change_file["font_size"]["gif"] = font_size
 
     if change_files:
         return change_files
@@ -224,8 +252,7 @@ def create_media():
     config_filepath = os.path.join(project_dir, "tracer.json")
     config = Config(config_filepath)
 
-    changes_dir = os.path.join(config.get("output_dir"), "changes")
-    change_files = get_change_files(changes_dir)
+    change_files = get_change_files(config)
 
     if config.get("group_by_file", True):
         change_files = group_by_file(change_files, flatten=True)

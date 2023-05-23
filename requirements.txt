@@ -4,7 +4,6 @@ build==0.7.0
 certifi==2022.12.7
 charset-normalizer==3.1.0
 click==8.1.3
--e git+ssh://git@github.com/Potaten2015/code-tracer.git@0ee0241401c9e6da449e68b1741890142fe6bd0e#egg=code_tracer
 coverage==7.2.3
 decorator==4.4.2
 docutils==0.19

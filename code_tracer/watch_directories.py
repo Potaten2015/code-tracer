@@ -3,9 +3,26 @@ import os
 import json
 import time
 import glob
-from video_creator import get_language
 from utils import Config, logger
 from constants import TIME_FORMAT
+
+
+SUPPORTED_LANGUAGES = {
+    ".py": "python",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".json": "json",
+    ".md": "markdown",
+    ".html": "html",
+    # Add more language mappings here
+}
+
+
+def get_language(filepath):
+    file_extension = os.path.splitext(filepath)[-1]
+    return SUPPORTED_LANGUAGES.get(file_extension, "text")
 
 
 def is_ignored(path, ignore_items):
