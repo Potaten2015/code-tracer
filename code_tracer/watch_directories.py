@@ -35,7 +35,7 @@ def is_ignored(path, ignore_items):
 def expand_wildcards(paths, config):
     expanded_paths = []
     ignore_items = config.get("ignore", [])
-    ignore_items = [os.path.join(config.get("project_dir"), item) for item in ignore_items]
+    ignore_items = [os.path.expanduser(os.path.join(config.get("project_dir"), item)) for item in ignore_items]
     for path in paths:
         if '*' in path:
             new_paths = glob.glob(path, include_hidden=True)
@@ -60,7 +60,7 @@ def expand_wildcards(paths, config):
 def remove_ignored(config):
     ignored = config.get("ignore")
 
-    output_dir = os.path.join(config.get("output_dir"))
+    output_dir = os.path.expanduser(os.path.join(config.get("output_dir")))
     changes_dir = os.path.join(output_dir, "changes")
     change_filenames = glob.glob(os.path.join(changes_dir, "*"), recursive=True, include_hidden=True)
     for change_filename in change_filenames:
@@ -75,13 +75,14 @@ def remove_ignored(config):
 
 def get_items(key, config):
     items = config.get(key)
+    items = [os.path.expanduser(item) for item in items]
     items = [os.path.join(config.get("project_dir"), item) for item in items]
     items = expand_wildcards(items, config)
     return items
 
 
 def watch_directories():
-    project_dir = input('Enter the path to the project directory: ')
+    project_dir = os.path.expanduser(input('Enter the path to the project directory: '))
     config_filepath = os.path.join(project_dir, 'tracer.json')
     config = Config(config_filepath)
 
@@ -94,10 +95,9 @@ def watch_directories():
     project_name = config.get("name")
 
     # Get the output folder from the config
-    output_dir = config.get("output_dir")
+    output_dir = os.path.expanduser(config.get("output_dir"))
 
     # Create the output directory if it doesn't exist
-    output_dir = os.path.expanduser(output_dir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 

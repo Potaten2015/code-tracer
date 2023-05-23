@@ -107,7 +107,7 @@ def create_gif(config, gif_clip, gif_output_dir):
 
 
 def create_gifs(config, change_files):
-    gif_output_dir = os.path.join(config.get("output_dir"), "gifs")
+    gif_output_dir = os.path.expanduser(os.path.join(config.get("output_dir"), "gifs"))
 
     os.makedirs(gif_output_dir, exist_ok=True)
 
@@ -133,7 +133,7 @@ def create_gifs(config, change_files):
 
 def create_video(config, change_files):
     video_frames = int(config.get("video_length", 300) / len(change_files) * config.get("video_fps"))
-    video_output_dir = os.path.join(config.get("output_dir"), "videos")
+    video_output_dir = os.path.expanduser(os.path.join(config.get("output_dir"), "videos"))
 
     os.makedirs(video_output_dir, exist_ok=True)
 
@@ -158,7 +158,7 @@ def create_video(config, change_files):
 
 
 def get_change_files(config):
-    changes_dir = os.path.join(config.get("output_dir"), "changes")
+    changes_dir = os.path.expanduser(os.path.join(config.get("output_dir"), "changes"))
     change_filenames = sorted(glob.glob(os.path.join(changes_dir, f"*")))
     change_files = [json.load(open(change_filename, "r")) for change_filename in change_filenames]
     change_files = [
@@ -248,7 +248,7 @@ def get_change_files(config):
 
 
 def create_media():
-    project_dir = input("Enter the path to the project directory: ")
+    project_dir = os.path.expanduser(input("Enter the path to the project directory: "))
     config_filepath = os.path.join(project_dir, "tracer.json")
     config = Config(config_filepath)
 
