@@ -7,6 +7,7 @@ DEFAULTS = {
     ],
     "interval": 1,
     "video_length": 60,
+    "video_fps": 60,
     "gifs": False,
     "gif_width": 500,
     "gif_height": 500,
@@ -14,7 +15,6 @@ DEFAULTS = {
     "gif_fps": 10,
     "group_by_file": False,
     "video": True,
-    "video_fps": 60,
     "resolutions": [
         {"name": "landscape", "dimensions": [4096, 2160]},
         {"name": "portrait", "dimensions": [2160, 4096]},

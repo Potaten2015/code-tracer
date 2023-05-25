@@ -20,6 +20,7 @@ BACKROUND_COLOR = ImageColor.getrgb(STYLE.background_color)
 
 def highlight_code(code, language, font_size=24):
     lexer = get_lexer_by_name(language)
+    lexer.stripnl = False
     formatter = ImageFormatter(
         font_size=font_size,
         style=STYLE,
@@ -161,19 +162,20 @@ def get_change_files(config):
     changes_dir = os.path.expanduser(os.path.join(config.get("output_dir"), "changes"))
     change_filenames = sorted(glob.glob(os.path.join(changes_dir, f"*")))
     change_files = [json.load(open(change_filename, "r")) for change_filename in change_filenames]
+    change_files = [change_file for change_file in change_files if change_file["content"] != ""]
     change_files = [
         {**change_file, "total_lines": len(change_file["content"].split("\n"))} for change_file in change_files
     ]
     max_lines = {filepath: 0 for filepath in set([change_file["filepath"] for change_file in change_files])}
-    max_chars = {filepath: 0 for filepath in set([change_file["filepath"] for change_file in change_files])}
+    max_line_chars = {filepath: 0 for filepath in set([change_file["filepath"] for change_file in change_files])}
     max_char_indexes = {}
     for file_index, change_file in enumerate(change_files):
         max_lines[change_file["filepath"]] = max(max_lines[change_file["filepath"]], change_file["total_lines"])
-        file_max_chars = 0
+        file_max_line_chars = 0
         for line in change_file["content"].split("\n"):
-            file_max_chars = max(len(line), file_max_chars)
-        if file_max_chars > max_chars[change_file["filepath"]]:
-            max_chars[change_file["filepath"]] = file_max_chars
+            file_max_line_chars = max(len(line), file_max_line_chars)
+        if file_max_line_chars > max_line_chars[change_file["filepath"]]:
+            max_line_chars[change_file["filepath"]] = file_max_line_chars
             max_char_indexes[change_file["filepath"]] = file_index
 
     change_files = [
@@ -182,9 +184,11 @@ def get_change_files(config):
     ]
     change_files = [change_file for change_file in change_files if change_file["max_lines"] > 0]
 
-    for filepath, max_char_index in max_char_indexes.items():
+    font_sizes = {}
+
+    for _, max_char_index in max_char_indexes.items():
         change_file = change_files[max_char_index]
-        text = f"({change_file['github_username']}::{change_file['project_name']}):{filepath}"
+        text = f"({change_file['github_username']}::{change_file['project_name']}):{change_file['filepath']}"
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.8
         font_thickness = 2
@@ -215,7 +219,7 @@ def get_change_files(config):
                         high = font_size
                     else:
                         low = font_size  # increase the font size
-                change_file["font_size"][resolution["name"]] = font_size
+                font_sizes.setdefault(change_file['filepath'], {})[resolution["name"]] = font_size
 
         if config.get("gifs"):
             max_code_height = config.get("gif_height") - text_size[1]
@@ -239,7 +243,9 @@ def get_change_files(config):
                     high = font_size
                 else:
                     low = font_size  # increase the font size
-            change_file["font_size"]["gif"] = font_size
+            font_sizes.setdefault(change_file['filepath'], {})["gif"] = font_size
+
+    change_files = [{**change_file, "font_size": font_sizes[change_file['filepath']]} for change_file in change_files]
 
     if change_files:
         return change_files

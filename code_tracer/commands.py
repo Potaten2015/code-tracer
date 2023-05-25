@@ -4,6 +4,7 @@ import os
 import glob
 from video_creator import create_media
 from utils import logger
+from constants import DEFAULTS
 
 
 def init_config_file():
@@ -83,6 +84,7 @@ def init_config_file():
 
     # Create the configuration dictionary
     config = {
+        **DEFAULTS,
         'watch': watch_items,
         'ignore': [item.strip() for item in ignore_items],
         'interval': interval,

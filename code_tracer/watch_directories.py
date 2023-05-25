@@ -169,7 +169,7 @@ def copy_file(filepath, output_dir, timestamp, project_name, config):
     changes_dir = os.path.join(output_dir, "changes")
     os.makedirs(changes_dir, exist_ok=True)
 
-    updated_filepath = filepath.replace(os.path.sep, "_")
+    updated_filepath = filepath.replace(os.path.sep, "__")
     change_filename = f"{timestamp}_{updated_filepath}.json"
     change_filepath = os.path.join(changes_dir, change_filename)
 
