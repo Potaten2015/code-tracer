@@ -1,17 +1,20 @@
+import cv2
+import glob
 import json
 import math
-import os
-import cv2
+import multiprocessing
 import numpy as np
+import os
+import shutil
+
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import ImageFormatter
 from pygments.styles import get_style_by_name
 from moviepy.editor import ImageSequenceClip
-from utils import Config, logger
-import glob
 from PIL import ImageColor
-import multiprocessing
+
+from utils import Config, logger
 
 
 STYLE = get_style_by_name('bw')
@@ -109,7 +112,7 @@ def create_gif(config, gif_clip, change_files, gif_output_dir):
 
 
 def create_gifs(config, change_files):
-    gif_output_dir = os.path.expanduser(os.path.join(config.get("output_dir"), "gifs"))
+    gif_output_dir = os.path.expanduser(os.path.join(config.get("output_dir"), "gifs", config.get("session_folder")))
 
     os.makedirs(gif_output_dir, exist_ok=True)
 
@@ -135,7 +138,9 @@ def create_gifs(config, change_files):
 
 def create_video(config, change_files):
     video_frames = int(config.get("video_length", 300) / len(change_files) * config.get("video_fps"))
-    video_output_dir = os.path.expanduser(os.path.join(config.get("output_dir"), "videos"))
+    video_output_dir = os.path.expanduser(
+        os.path.join(config.get("output_dir"), "videos", config.get("session_folder"))
+    )
 
     os.makedirs(video_output_dir, exist_ok=True)
 
@@ -160,9 +165,16 @@ def create_video(config, change_files):
         clip.write_videofile(output_filepath, fps=config.get("video_fps"))
 
 
-def preprocess_change_files(change_files):
-    # Remove empty files
+def preprocess_change_files(config, change_files):
     preprocessed_change_files = [change_file for change_file in change_files if change_file["content"] != ""]
+    for change_file in preprocessed_change_files:
+        if not change_file.get("session"):
+            change_file["session"] = "default"
+    preprocessed_change_files = [
+        change_file
+        for change_file in preprocessed_change_files
+        if change_file.get("session") in config.get("render_sessions")
+    ]
     # Add number of lines per file
     preprocessed_change_files = [
         {**change_file, "total_lines": len(change_file["content"].split("\n"))}
@@ -238,7 +250,7 @@ def get_change_files(config):
     change_filenames = sorted(glob.glob(os.path.join(changes_dir, f"*")))
     change_files = [json.load(open(change_filename, "r")) for change_filename in change_filenames]
 
-    change_files = preprocess_change_files(change_files)
+    change_files = preprocess_change_files(config, change_files)
     max_char_indexes = get_widest_files(change_files)
 
     font_sizes = {}

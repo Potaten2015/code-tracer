@@ -14,14 +14,15 @@ class Config:
         self._add_defaults()
 
     def _add_defaults(self):
-        complete = True
         for key, value in DEFAULTS.items():
             if key not in self.config:
-                complete = False
                 logger.info(f"Key {key} not found in config, using default value {value}")
                 self.config[key] = value
-        if not complete:
-            self.write(self.filepath)
+        self.config["render_sessions"] = list(set(self.config["render_sessions"]))
+        self.config["all_sessions"] = list(set(self.config["all_sessions"]))
+        self.config["render_sessions"].sort()
+        self.write(self.filepath)
+        self.config["session_folder"] = "_".join(self.config["render_sessions"])
 
     def load(self, filepath):
         logger.info(f"Loading config from {filepath}")
@@ -40,7 +41,8 @@ class Config:
         else:
             raise KeyError(f"Key '{key}' not found in config and no default provided")
 
-    def write(self, filepath):
+    def write(self, filepath=None):
+        filepath = filepath or self.filepath
         logger.info(f"Writing config to {filepath}")
         with open(filepath, 'w') as f:
             json.dump(self.config, f, indent=4)

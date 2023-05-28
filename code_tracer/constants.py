@@ -22,4 +22,7 @@ DEFAULTS = {
     ],
     "log_level": "INFO",
     "multi_processing": True,
+    "session": "default",
+    "render_sessions": ["default"],
+    "all_sessions": ["default"],
 }

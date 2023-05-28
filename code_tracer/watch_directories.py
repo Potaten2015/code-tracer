@@ -85,6 +85,11 @@ def watch_directories():
     project_dir = os.path.expanduser(input('Enter the path to the project directory: '))
     config_filepath = os.path.join(project_dir, 'tracer.json')
     config = Config(config_filepath)
+    session = input(f"Enter the session name (leave blank for current: {config.get('session')}):  ")
+    if session:
+        config.set("session", session)
+        config.append("all_sessions", session)
+        config.write(config_filepath)
 
     config.set("project_dir", project_dir)
     watch_items = get_items('watch', config)
@@ -179,6 +184,7 @@ def copy_file(filepath, output_dir, timestamp, project_name, config):
         "content": content,
         "project_name": project_name,
         "github_username": config.get("github_username"),
+        "session": config.get("session"),
     }
 
     with open(change_filepath, "w", encoding="utf-8") as f:
