@@ -27,6 +27,7 @@ class Config:
         logger.info(f"Loading config from {filepath}")
         with open(filepath, 'r') as f:
             self.config = json.load(f)
+        self._add_defaults()
         if self.config.get("log_level"):
             logger.setLevel(self.config.get("log_level").upper())
 

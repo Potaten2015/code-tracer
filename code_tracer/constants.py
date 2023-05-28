@@ -21,4 +21,5 @@ DEFAULTS = {
         {"name": "portrait", "dimensions": [2160, 4096]},
     ],
     "log_level": "INFO",
+    "multi_processing": True,
 }

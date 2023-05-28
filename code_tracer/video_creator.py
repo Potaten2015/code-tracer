@@ -143,7 +143,7 @@ def create_video(config, change_files):
         {"name": video_resolution["name"], "dimensions": video_resolution["dimensions"], "frames": []}
         for video_resolution in config.get("video_resolutions")
     ]
-    with multiprocessing.Pool() as pool:
+    with multiprocessing.Pool(processes=None if config.get("multi_processing") else 1) as pool:
         for clip_info in video_clips:
             starmap_args = [
                 (change_file, clip_info["dimensions"], change_file["font_size"][f"{clip_info['name']}_video"])
@@ -244,7 +244,7 @@ def get_change_files(config):
     font_sizes = {}
 
     starmap_args = []
-    with multiprocessing.Pool() as pool:
+    with multiprocessing.Pool(processes=None if config.get("multi_processing") else 1) as pool:
         for _, max_char_index in max_char_indexes.items():
             change_file = change_files[max_char_index]
             if config.get("video"):
@@ -266,6 +266,9 @@ def get_change_files(config):
 
 
 def create_media():
+    from time import time
+
+    start_time = time()
     project_dir = os.path.expanduser(input("Enter the path to the project directory: "))
     config_filepath = os.path.join(project_dir, "tracer.json")
     config = Config(config_filepath)
@@ -280,6 +283,8 @@ def create_media():
 
     if config.get("gifs", False):
         create_gifs(config, change_files)
+
+    logger.info(f"Finished creating media in {time() - start_time} seconds.")
 
 
 if __name__ == "__main__":
