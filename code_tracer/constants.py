@@ -9,13 +9,14 @@ DEFAULTS = {
     "video_length": 60,
     "video_fps": 60,
     "gifs": False,
-    "gif_width": 2000,
-    "gif_height": 2000,
+    "gif_resolutions": [
+        {"name": "square", "dimensions": [2000, 2000]},
+    ],
     "gif_length": 10,
     "gif_fps": 10,
     "group_by_file": False,
     "video": True,
-    "resolutions": [
+    "video_resolutions": [
         {"name": "landscape", "dimensions": [4096, 2160]},
         {"name": "portrait", "dimensions": [2160, 4096]},
     ],

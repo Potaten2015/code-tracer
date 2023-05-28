@@ -94,12 +94,12 @@ def create_image(data, dimensions, final_font_size):
     return canvas
 
 
-def create_gif(config, gif_clip, gif_output_dir):
+def create_gif(config, gif_clip, change_files, gif_output_dir):
     frames = []
     logger.info(f"Processing gif for {gif_clip['name']}")
     gif_frames = int(config.get("gif_length", 5) / len(gif_clip["files"]) * config.get("gif_fps"))
-    for change_file in gif_clip["files"]:
-        img = create_image(change_file, gif_clip["dimensions"], change_file["font_size"]["gif"])
+    for change_file in change_files:
+        img = create_image(change_file, gif_clip["dimensions"], change_file["font_size"][f"{gif_clip['name']}_video"])
         frames.extend([img] * gif_frames)
     clip = ImageSequenceClip(frames, fps=config.get("gif_fps"))
     output_filename = f"{config.get('name')}_{gif_clip['name']}.gif"
@@ -112,21 +112,21 @@ def create_gifs(config, change_files):
 
     os.makedirs(gif_output_dir, exist_ok=True)
 
-    gif_clips = group_by_file(change_files)
+    gif_change_files = group_by_file(change_files)
     gif_clips = [
-        {
-            "name": filepath,
-            "dimensions": (config.get("gif_width", 500), config.get("gif_height", 500)),
-            "files": change_files,
-        }
-        for filepath, change_files in gif_clips.items()
+        {"name": resolution["name"], "dimensions": resolution["dimensions"], "files": gif_change_files}
+        for resolution in config.get("video_resolutions")
     ]
 
     processes = []
     for gif_clip in gif_clips:
-        p = multiprocessing.Process(target=create_gif, args=(config, gif_clip, gif_output_dir))
-        processes.append(p)
-        p.start()
+        for gif_change_file_group in gif_clip["files"].values():
+            p = multiprocessing.Process(
+                target=create_gif,
+                args=(config, gif_clip, gif_change_file_group, gif_output_dir),
+            )
+            processes.append(p)
+            p.start()
 
     for p in processes:
         p.join()
@@ -138,51 +138,71 @@ def create_video(config, change_files):
 
     os.makedirs(video_output_dir, exist_ok=True)
 
-    clips = [
-        {"name": resolution["name"], "dimensions": resolution["dimensions"], "frames": []}
-        for resolution in config.get("resolutions")
+    video_clips = [
+        {"name": video_resolution["name"], "dimensions": video_resolution["dimensions"], "frames": []}
+        for video_resolution in config.get("video_resolutions")
     ]
-    for (
-        i,
-        clip_info,
-    ) in enumerate(clips):
+    for clip_info in video_clips:
         for change_file in change_files:
             logger.info(f"Processing {change_file['filepath']} for {clip_info['name']}")
-            img = create_image(change_file, clip_info["dimensions"], change_file["font_size"][clip_info["name"]])
-            clips[i]["frames"].extend([img] * video_frames)
+            img = create_image(
+                change_file, clip_info["dimensions"], change_file["font_size"][f"{clip_info['name']}_video"]
+            )
+            clip_info["frames"].extend([img] * video_frames)
 
-    for clip_info in clips:
+    for clip_info in video_clips:
         clip = ImageSequenceClip(clip_info['frames'], fps=config.get("video_fps"))
         output_filename = f"{config.get('name')}_{clip_info['dimensions'][0]}x{clip_info['dimensions'][1]}.mp4"
         output_filepath = os.path.join(video_output_dir, output_filename)
         clip.write_videofile(output_filepath, fps=config.get("video_fps"))
 
 
-def get_change_files(config):
-    changes_dir = os.path.expanduser(os.path.join(config.get("output_dir"), "changes"))
-    change_filenames = sorted(glob.glob(os.path.join(changes_dir, f"*")))
-    change_files = [json.load(open(change_filename, "r")) for change_filename in change_filenames]
-    change_files = [change_file for change_file in change_files if change_file["content"] != ""]
-    change_files = [
-        {**change_file, "total_lines": len(change_file["content"].split("\n"))} for change_file in change_files
+def preprocess_change_files(change_files):
+    # Remove empty files
+    preprocessed_change_files = [change_file for change_file in change_files if change_file["content"] != ""]
+    # Add number of lines per file
+    preprocessed_change_files = [
+        {**change_file, "total_lines": len(change_file["content"].split("\n"))}
+        for change_file in preprocessed_change_files
     ]
-    max_lines = {filepath: 0 for filepath in set([change_file["filepath"] for change_file in change_files])}
+    # Find the maximum number of lines per file, and the maximum number of characters per line per file
+    max_lines = {
+        filepath: 0 for filepath in set([change_file["filepath"] for change_file in preprocessed_change_files])
+    }
+
+    for change_file in preprocessed_change_files:
+        max_lines[change_file["filepath"]] = max(max_lines[change_file["filepath"]], change_file["total_lines"])
+
+    preprocessed_change_files = [
+        {**change_file, "max_lines": max_lines[change_file["filepath"]], "font_size": {}}
+        for change_file in preprocessed_change_files
+    ]
+    preprocessed_change_files = [
+        change_file for change_file in preprocessed_change_files if change_file["max_lines"] > 0
+    ]
+    return preprocessed_change_files
+
+
+def get_widest_files(change_files):
     max_line_chars = {filepath: 0 for filepath in set([change_file["filepath"] for change_file in change_files])}
     max_char_indexes = {}
+    file_max_line_chars = 0
     for file_index, change_file in enumerate(change_files):
-        max_lines[change_file["filepath"]] = max(max_lines[change_file["filepath"]], change_file["total_lines"])
-        file_max_line_chars = 0
         for line in change_file["content"].split("\n"):
             file_max_line_chars = max(len(line), file_max_line_chars)
         if file_max_line_chars > max_line_chars[change_file["filepath"]]:
             max_line_chars[change_file["filepath"]] = file_max_line_chars
             max_char_indexes[change_file["filepath"]] = file_index
+    return max_char_indexes
 
-    change_files = [
-        {**change_file, "max_lines": max_lines[change_file["filepath"]], "font_size": {}}
-        for change_file in change_files
-    ]
-    change_files = [change_file for change_file in change_files if change_file["max_lines"] > 0]
+
+def get_change_files(config):
+    changes_dir = os.path.expanduser(os.path.join(config.get("output_dir"), "changes"))
+    change_filenames = sorted(glob.glob(os.path.join(changes_dir, f"*")))
+    change_files = [json.load(open(change_filename, "r")) for change_filename in change_filenames]
+
+    change_files = preprocess_change_files(change_files)
+    max_char_indexes = get_widest_files(change_files)
 
     font_sizes = {}
 
@@ -197,7 +217,8 @@ def get_change_files(config):
         extended_content = change_file["content"] + "\n" * (change_file["max_lines"] - change_file["total_lines"])
 
         if config.get("video"):
-            for resolution in config.get("resolutions"):
+            for resolution in config.get("video_resolutions"):
+                logger.info(f"Determining font size for: {change_file['filepath']} for {resolution['name']} video")
                 max_code_height = resolution["dimensions"][1] - text_size[1]
                 high = 400
                 low = 1
@@ -205,7 +226,7 @@ def get_change_files(config):
                 font_size = (high + low) / 2
                 while high - low > precision:
                     font_size = (high + low) / 2
-                    logger.debug(f"Trying font size: {font_size}")
+                    logger.debug(f"{resolution['name']}_video > {change_file['filepath']} > font_size: {font_size}")
                     code_image = np.frombuffer(
                         highlight_code(extended_content, change_file["language"], font_size=font_size), dtype=np.uint8
                     )
@@ -219,31 +240,33 @@ def get_change_files(config):
                         high = font_size
                     else:
                         low = font_size  # increase the font size
-                font_sizes.setdefault(change_file['filepath'], {})[resolution["name"]] = font_size
+                font_sizes.setdefault(change_file['filepath'], {})[f"{resolution['name']}_video"] = font_size
 
         if config.get("gifs"):
-            max_code_height = config.get("gif_height") - text_size[1]
-            high = 400
-            low = 1
-            precision = 0.1
-            font_size = (high + low) / 2
-            while high - low > precision:
+            for resolution in config.get("gif_resolutions"):
+                logger.info(f"Determining font size for: {change_file['filepath']} for {resolution['name']} gif")
+                max_code_height = resolution["dimensions"][1] - text_size[1]
+                high = 400
+                low = 1
+                precision = 0.1
                 font_size = (high + low) / 2
-                logger.debug(f"Trying font size: {font_size}")
-                code_image = np.frombuffer(
-                    highlight_code(extended_content, change_file["language"], font_size=font_size), dtype=np.uint8
-                )
-                code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
-                code_image_width = code_image.shape[1]
-                code_image_height = code_image.shape[0]
-                wrap_count = math.ceil(code_image_height / max_code_height)
-                wrap_width = wrap_count * code_image_width
+                while high - low > precision:
+                    font_size = (high + low) / 2
+                    logger.debug(f"{resolution['name']}_gif > {change_file['filepath']} > font_size: {font_size}")
+                    code_image = np.frombuffer(
+                        highlight_code(extended_content, change_file["language"], font_size=font_size), dtype=np.uint8
+                    )
+                    code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
+                    code_image_width = code_image.shape[1]
+                    code_image_height = code_image.shape[0]
+                    wrap_count = math.ceil(code_image_height / max_code_height)
+                    wrap_width = wrap_count * code_image_width
 
-                if wrap_width > config.get("gif_width"):
-                    high = font_size
-                else:
-                    low = font_size  # increase the font size
-            font_sizes.setdefault(change_file['filepath'], {})["gif"] = font_size
+                    if wrap_width > resolution["dimensions"][0]:
+                        high = font_size
+                    else:
+                        low = font_size  # increase the font size
+                font_sizes.setdefault(change_file['filepath'], {})[f"{resolution['name']}_gif"] = font_size
 
     change_files = [{**change_file, "font_size": font_sizes[change_file['filepath']]} for change_file in change_files]
 
