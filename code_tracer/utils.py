@@ -4,7 +4,7 @@ from constants import DEFAULTS
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 class Config:
@@ -29,8 +29,7 @@ class Config:
         with open(filepath, 'r') as f:
             self.config = json.load(f)
         self._add_defaults()
-        if self.config.get("log_level"):
-            logger.setLevel(self.config.get("log_level").upper())
+        logger.setLevel(self.config.get("log_level").upper())
 
     def get(self, key, default=None):
         result = self.config.get(key)
