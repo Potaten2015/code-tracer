@@ -77,12 +77,12 @@ def create_image(data, dimensions, final_font_size):
     code_image_slice = code_image
     code_image_width = code_image.shape[1]
     i = 0
+    logger.info(f"code_image_slize.shape: {code_image_slice.shape}")
+    logger.info(f"canvas.shape: {canvas.shape}")
     while code_image_slice.size != 0:
         code_image_slice = code_image[i * max_code_height : (i + 1) * max_code_height, :, :]
         if code_image_slice.size == 0:
             break
-        if code_image_slice.shape[1] + (i * code_image_width) > dimensions[0]:
-            code_image_slice = code_image_slice[:, : dimensions[0] - (i * code_image_width), :]
         try:
             canvas[
                 text_size[1] : code_image_slice.shape[0] + text_size[1],
@@ -108,6 +108,7 @@ def create_gif(config, gif_clip, change_files, gif_output_dir):
     clip = ImageSequenceClip(frames, fps=config.get("gif_fps"))
     output_filename = f"{config.get('name')}_{gif_clip['name']}.gif"
     output_filepath = os.path.join(gif_output_dir, output_filename)
+    logger.info("HERE WE ARE TRYING TO WRITE THE GIF")
     clip.write_gif(output_filepath, fps=config.get("gif_fps"))
 
 
@@ -167,6 +168,9 @@ def create_video(config, change_files):
 
 def preprocess_change_files(config, change_files):
     preprocessed_change_files = [change_file for change_file in change_files if change_file["content"] != ""]
+    if not preprocessed_change_files:
+        logger.error("All change files are empty.")
+        exit(1)
     for change_file in preprocessed_change_files:
         if not change_file.get("session"):
             change_file["session"] = "default"
@@ -175,6 +179,9 @@ def preprocess_change_files(config, change_files):
         for change_file in preprocessed_change_files
         if change_file.get("session") in config.get("render_sessions")
     ]
+    if not preprocessed_change_files:
+        logger.error(f"No change files found for the specified render sessions: {config.get('render_sessions')} .")
+        exit(1)
     # Add number of lines per file
     preprocessed_change_files = [
         {**change_file, "total_lines": len(change_file["content"].split("\n"))}
@@ -248,6 +255,9 @@ def get_font_size(change_file, resolution, type):
 def get_change_files(config):
     changes_dir = os.path.expanduser(os.path.join(config.get("output_dir"), "changes"))
     change_filenames = sorted(glob.glob(os.path.join(changes_dir, f"*")))
+    if not change_filenames:
+        logger.error("No change files found.")
+        exit(1)
     change_files = [json.load(open(change_filename, "r")) for change_filename in change_filenames]
 
     change_files = preprocess_change_files(config, change_files)
@@ -266,8 +276,8 @@ def get_change_files(config):
             if config.get("gifs"):
                 starmap_args.extend([(change_file, resolution, "gif") for resolution in config.get("gif_resolutions")])
 
-        for filepath, resolution_key, font_size in pool.starmap(get_font_size, starmap_args):
-            font_sizes.setdefault(filepath, {})[resolution_key] = font_size
+        for filepath, resolution_name, font_size in pool.starmap(get_font_size, starmap_args):
+            font_sizes.setdefault(filepath, {})[resolution_name] = font_size
 
     change_files = [{**change_file, "font_size": font_sizes[change_file['filepath']]} for change_file in change_files]
 
