@@ -19,6 +19,9 @@ from utils import Config, logger
 
 STYLE = get_style_by_name('bw')
 BACKROUND_COLOR = ImageColor.getrgb(STYLE.background_color)
+HEADER_FONT = cv2.FONT_HERSHEY_SIMPLEX
+HEADER_FONT_SCALE = 0.8
+HEADER_FONT_THICKNESS = 2
 
 
 def highlight_code(code, language, font_size=24):
@@ -52,48 +55,58 @@ def group_by_file(changes_files, flatten=False):
     return grouped_changes
 
 
-def create_image(data, dimensions, final_font_size):
-    # Add filepath and project name to the image
-    text = f"({data['github_username']}::{data['project_name']}):{data['filepath']}"
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.8
-    font_thickness = 2
-    text_size, _ = cv2.getTextSize(text, font, font_scale, font_thickness)
+def add_header(change_file, canvas=None):
+    text = f"{change_file['github_username']}::{change_file['project_name']}::{change_file['filepath']}"
+    header_size, _ = cv2.getTextSize(text, HEADER_FONT, HEADER_FONT_SCALE, HEADER_FONT_THICKNESS)
+    if canvas is not None:
+        cv2.putText(canvas, text, (0, header_size[1]), HEADER_FONT, HEADER_FONT_SCALE, (0, 0, 0), HEADER_FONT_THICKNESS)
+    return header_size
 
-    extended_content = data["content"] + "\n" * (data["max_lines"] - data["total_lines"])
+def add_filler_lines(change_file):
+    return change_file["content"] + ("\n" * (change_file["max_lines"] - change_file["total_lines"]))
 
-    max_code_height = dimensions[1] - text_size[1]
 
-    code_image = np.frombuffer(
-        highlight_code(extended_content, data["language"], font_size=final_font_size),
-        dtype=np.uint8,
-    )
-    code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
-
+def create_canvas(change_file, dimensions):
     canvas_r = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[0])
     canvas_g = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[1])
     canvas_b = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[2])
     canvas = np.stack([canvas_r, canvas_g, canvas_b], axis=-1)
+    return canvas
+
+
+def create_image(change_file, dimensions, final_font_size):
+    canvas = create_canvas(change_file, dimensions)
+    header_size = add_header(change_file, canvas=canvas)
+    extended_content = add_filler_lines(change_file)
+    max_code_height = dimensions[1] - header_size[1]
+
+    code_image = np.frombuffer(
+        highlight_code(extended_content, change_file["language"], font_size=final_font_size),
+        dtype=np.uint8,
+    )
+    code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
+
     code_image_slice = code_image
     code_image_width = code_image.shape[1]
     i = 0
     logger.info(f"code_image_slize.shape: {code_image_slice.shape}")
     logger.info(f"canvas.shape: {canvas.shape}")
+    slice = 0
     while code_image_slice.size != 0:
         code_image_slice = code_image[i * max_code_height : (i + 1) * max_code_height, :, :]
         if code_image_slice.size == 0:
             break
+        slice = slice + 1
         try:
             canvas[
-                text_size[1] : code_image_slice.shape[0] + text_size[1],
+                header_size[1] : code_image_slice.shape[0] + header_size[1],
                 i * code_image_width : i * code_image_width + code_image_slice.shape[1],
                 :,
             ] = code_image_slice
         except Exception as e:
-            logger.error(f"Unable to process file fully: {data['filepath']}")
+            logger.error(f"Unable to process file fully: {change_file['filepath']} - slice: {slice} - code_image.shape: {code_image.shape} - canvas.shape: {canvas.shape}")
             logger.error(e)
         i = i + 1
-    cv2.putText(canvas, text, (0, text_size[1]), font, font_scale, (0, 0, 0), font_thickness)
 
     return canvas
 
@@ -219,23 +232,18 @@ def get_widest_files(change_files):
 
 
 def get_font_size(change_file, resolution, type):
-    text = f"({change_file['github_username']}::{change_file['project_name']}):{change_file['filepath']}"
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.8
-    font_thickness = 2
-    text_size, _ = cv2.getTextSize(text, font, font_scale, font_thickness)
-
-    extended_content = change_file["content"] + "\n" * (change_file["max_lines"] - change_file["total_lines"])
-
     logger.info(f"Determining font size for: {change_file['filepath']} for {resolution['name']} {type}")
-    max_code_height = resolution["dimensions"][1] - text_size[1]
-    high = 400
-    low = 1
+    header_size = add_header(change_file)
+    extended_content = add_filler_lines(change_file)
+
+    max_code_height = resolution["dimensions"][1] - header_size[1]
+    high = 500
+    low = 0
     precision = 0.1
     font_size = (high + low) / 2
+    best = high
     while high - low > precision:
         font_size = (high + low) / 2
-        logger.debug(f"{change_file['filepath']} > font_size: {font_size}")
         code_image = np.frombuffer(
             highlight_code(extended_content, change_file["language"], font_size=font_size), dtype=np.uint8
         )
@@ -244,12 +252,13 @@ def get_font_size(change_file, resolution, type):
         code_image_height = code_image.shape[0]
         wrap_count = math.ceil(code_image_height / max_code_height)
         wrap_width = wrap_count * code_image_width
-
-        if wrap_width > resolution["dimensions"][0]:
+        if wrap_width >= resolution["dimensions"][0] or (wrap_count == 1 and code_image_height > max_code_height):
             high = font_size
         else:
-            low = font_size  # increase the font size
-    return (change_file['filepath'], f"{resolution['name']}_{type}", font_size)
+            best = font_size
+            low = font_size
+
+    return (change_file['filepath'], f"{resolution['name']}_{type}", best)
 
 
 def get_change_files(config):

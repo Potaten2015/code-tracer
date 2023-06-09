@@ -12,6 +12,7 @@ class Config:
         self.filepath = filepath
         self.load(self.filepath)
         self._add_defaults()
+        
 
     def _add_defaults(self):
         for key, value in DEFAULTS.items():
@@ -29,7 +30,8 @@ class Config:
         with open(filepath, 'r') as f:
             self.config = json.load(f)
         self._add_defaults()
-        logger.setLevel(self.config.get("log_level").upper())
+        self.logger = logger
+        self.logger.setLevel(self.config.get("log_level").upper())
 
     def get(self, key, default=None):
         result = self.config.get(key)
