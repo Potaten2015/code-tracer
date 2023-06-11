@@ -5,7 +5,7 @@ import math
 import multiprocessing
 import numpy as np
 import os
-import shutil
+from tqdm import tqdm
 
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
@@ -62,6 +62,7 @@ def add_header(change_file, canvas=None):
         cv2.putText(canvas, text, (0, header_size[1]), HEADER_FONT, HEADER_FONT_SCALE, (0, 0, 0), HEADER_FONT_THICKNESS)
     return header_size
 
+
 def add_filler_lines(change_file):
     return change_file["content"] + ("\n" * (change_file["max_lines"] - change_file["total_lines"]))
 
@@ -88,15 +89,18 @@ def create_image(change_file, dimensions, final_font_size):
 
     code_image_slice = code_image
     code_image_width = code_image.shape[1]
+
     i = 0
-    logger.info(f"code_image_slize.shape: {code_image_slice.shape}")
-    logger.info(f"canvas.shape: {canvas.shape}")
     slice = 0
     while code_image_slice.size != 0:
+        slice = slice + 1
         code_image_slice = code_image[i * max_code_height : (i + 1) * max_code_height, :, :]
         if code_image_slice.size == 0:
             break
-        slice = slice + 1
+        if code_image_slice.shape[0] > max_code_height:
+            code_image_slice = code_image_slice[:max_code_height, :, :]
+        if code_image_slice.shape[1] > dimensions[0]:
+            code_image_slice = code_image_slice[:, : dimensions[0], :]
         try:
             canvas[
                 header_size[1] : code_image_slice.shape[0] + header_size[1],
@@ -104,7 +108,10 @@ def create_image(change_file, dimensions, final_font_size):
                 :,
             ] = code_image_slice
         except Exception as e:
-            logger.error(f"Unable to process file fully: {change_file['filepath']} - slice: {slice} - code_image.shape: {code_image.shape} - canvas.shape: {canvas.shape}")
+            logger.error(
+                f"Unable to process file fully: {change_file['filepath']} - slice: {slice} - code_image_slice.shape:"
+                f" {code_image_slice.shape} - canvas.shape: {canvas.shape}"
+            )
             logger.error(e)
         i = i + 1
 
@@ -118,11 +125,11 @@ def create_gif(config, gif_clip, change_files, gif_output_dir):
     for change_file in change_files:
         img = create_image(change_file, gif_clip["dimensions"], change_file["font_size"][f"{gif_clip['name']}_gif"])
         frames.extend([img] * gif_frames)
-    clip = ImageSequenceClip(frames, fps=config.get("gif_fps"))
-    output_filename = f"{config.get('name')}_{gif_clip['name']}.gif"
-    output_filepath = os.path.join(gif_output_dir, output_filename)
-    logger.info("HERE WE ARE TRYING TO WRITE THE GIF")
-    clip.write_gif(output_filepath, fps=config.get("gif_fps"))
+    if frames:
+        clip = ImageSequenceClip(frames, fps=config.get("gif_fps"))
+        output_filename = f"{config.get('name')}_{gif_clip['name']}_{change_files[0]['filepath']}.gif"
+        output_filepath = os.path.join(gif_output_dir, output_filename)
+        clip.write_gif(output_filepath, fps=config.get("gif_fps"))
 
 
 def create_gifs(config, change_files):
@@ -137,7 +144,9 @@ def create_gifs(config, change_files):
     ]
 
     processes = []
+    logger.info("Creating gifs...")
     for gif_clip in gif_clips:
+        logger.info(f"Processing {gif_clip['name']}")
         for gif_change_file_group in gif_clip["files"].values():
             p = multiprocessing.Process(
                 target=create_gif,
@@ -162,6 +171,7 @@ def create_video(config, change_files):
         {"name": video_resolution["name"], "dimensions": video_resolution["dimensions"], "frames": []}
         for video_resolution in config.get("video_resolutions")
     ]
+    logger.info("Creating frames...")
     with multiprocessing.Pool(processes=None if config.get("multi_processing") else 1) as pool:
         for clip_info in video_clips:
             starmap_args = [
@@ -169,14 +179,17 @@ def create_video(config, change_files):
                 for change_file in change_files
             ]
             logger.info(f"Processing {clip_info['name']}_video")
-            for img in pool.starmap(create_image, starmap_args):
+            for img in tqdm(pool.starmap(create_image, starmap_args), total=len(starmap_args)):
                 clip_info["frames"].extend([img] * video_frames)
 
+    logger.info("Creating videos...")
     for clip_info in video_clips:
-        clip = ImageSequenceClip(clip_info['frames'], fps=config.get("video_fps"))
-        output_filename = f"{config.get('name')}_{clip_info['dimensions'][0]}x{clip_info['dimensions'][1]}.mp4"
-        output_filepath = os.path.join(video_output_dir, output_filename)
-        clip.write_videofile(output_filepath, fps=config.get("video_fps"))
+        logger.info(f"clips: {len(clip_info['frames'])} - {clip_info['name']}_video")
+        if clip_info["frames"]:
+            clip = ImageSequenceClip(clip_info['frames'], fps=config.get("video_fps"))
+            output_filename = f"{config.get('name')}_{clip_info['dimensions'][0]}x{clip_info['dimensions'][1]}.mp4"
+            output_filepath = os.path.join(video_output_dir, output_filename)
+            clip.write_videofile(output_filepath, fps=config.get("video_fps"))
 
 
 def preprocess_change_files(config, change_files):
@@ -219,29 +232,34 @@ def preprocess_change_files(config, change_files):
 
 
 def get_widest_files(change_files):
-    max_line_chars = {filepath: 0 for filepath in set([change_file["filepath"] for change_file in change_files])}
-    max_char_indexes = {}
-    file_max_line_chars = 0
-    for file_index, change_file in enumerate(change_files):
-        for line in change_file["content"].split("\n"):
-            file_max_line_chars = max(len(line), file_max_line_chars)
-        if file_max_line_chars > max_line_chars[change_file["filepath"]]:
-            max_line_chars[change_file["filepath"]] = file_max_line_chars
-            max_char_indexes[change_file["filepath"]] = file_index
-    return max_char_indexes
+    max_widths = {filepath: 0 for filepath in set([change_file["filepath"] for change_file in change_files])}
+    max_width_indices = {}
+    logger.info("Determining widest change file per file path...")
+    for file_index, change_file in tqdm(enumerate(change_files), total=len(change_files)):
+        extended_content = add_filler_lines(change_file)
+        code_image = np.frombuffer(
+            highlight_code(extended_content, change_file["language"], font_size=1), dtype=np.uint8
+        )
+        code_image = cv2.imdecode(code_image, cv2.IMREAD_UNCHANGED)
+        if code_image.shape[1] > max_widths[change_file["filepath"]]:
+            max_widths[change_file["filepath"]] = code_image.shape[1]
+            max_width_indices[change_file["filepath"]] = file_index
+    logger.info("Done.")
+    return max_width_indices
 
 
 def get_font_size(change_file, resolution, type):
     logger.info(f"Determining font size for: {change_file['filepath']} for {resolution['name']} {type}")
     header_size = add_header(change_file)
     extended_content = add_filler_lines(change_file)
-
+    longest_line = max([len(line) for line in extended_content.split("\n")])
     max_code_height = resolution["dimensions"][1] - header_size[1]
-    high = 500
+
+    high = min(500 * (20 / longest_line), 500)
     low = 0
-    precision = 0.1
+    precision = 1
     font_size = (high + low) / 2
-    best = high
+    best = low
     while high - low > precision:
         font_size = (high + low) / 2
         code_image = np.frombuffer(
@@ -252,13 +270,13 @@ def get_font_size(change_file, resolution, type):
         code_image_height = code_image.shape[0]
         wrap_count = math.ceil(code_image_height / max_code_height)
         wrap_width = wrap_count * code_image_width
-        if wrap_width >= resolution["dimensions"][0] or (wrap_count == 1 and code_image_height > max_code_height):
-            high = font_size
+        if wrap_width >= resolution["dimensions"][0]:
+            high = math.floor(font_size)
         else:
-            best = font_size
-            low = font_size
+            best = math.floor(font_size)
+            low = math.floor(font_size)
 
-    return (change_file['filepath'], f"{resolution['name']}_{type}", best)
+    return (change_file['filepath'], f"{resolution['name']}_{type}", best - 1)
 
 
 def get_change_files(config):
@@ -270,13 +288,13 @@ def get_change_files(config):
     change_files = [json.load(open(change_filename, "r")) for change_filename in change_filenames]
 
     change_files = preprocess_change_files(config, change_files)
-    max_char_indexes = get_widest_files(change_files)
+    max_width_indices = get_widest_files(change_files)
 
     font_sizes = {}
 
     starmap_args = []
     with multiprocessing.Pool(processes=None if config.get("multi_processing") else 1) as pool:
-        for _, max_char_index in max_char_indexes.items():
+        for max_char_index in max_width_indices.values():
             change_file = change_files[max_char_index]
             if config.get("video"):
                 starmap_args.extend(
@@ -285,7 +303,10 @@ def get_change_files(config):
             if config.get("gifs"):
                 starmap_args.extend([(change_file, resolution, "gif") for resolution in config.get("gif_resolutions")])
 
-        for filepath, resolution_name, font_size in pool.starmap(get_font_size, starmap_args):
+        logger.info("Fitting font sizes to desired resolutions...")
+        for filepath, resolution_name, font_size in tqdm(
+            pool.starmap(get_font_size, starmap_args), total=len(starmap_args)
+        ):
             font_sizes.setdefault(filepath, {})[resolution_name] = font_size
 
     change_files = [{**change_file, "font_size": font_sizes[change_file['filepath']]} for change_file in change_files]

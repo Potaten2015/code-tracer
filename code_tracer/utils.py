@@ -4,7 +4,7 @@ from constants import DEFAULTS
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.CRITICAL)
 
 
 class Config:
@@ -12,7 +12,6 @@ class Config:
         self.filepath = filepath
         self.load(self.filepath)
         self._add_defaults()
-        
 
     def _add_defaults(self):
         for key, value in DEFAULTS.items():
