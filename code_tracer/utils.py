@@ -12,6 +12,7 @@ class Config:
         self.filepath = filepath
         self.load(self.filepath)
         self._add_defaults()
+        self.local_config = {}
 
     def _add_defaults(self):
         for key, value in DEFAULTS.items():
@@ -33,7 +34,8 @@ class Config:
         self.logger.setLevel(self.config.get("log_level").upper())
 
     def get(self, key, default=None):
-        result = self.config.get(key)
+        combined_config = {**self.config, **self.local_config}
+        result = combined_config.get(key)
         if result is not None:
             return result
         elif default:
@@ -47,14 +49,17 @@ class Config:
         with open(filepath, 'w') as f:
             json.dump(self.config, f, indent=4)
 
-    def append(self, key, value):
-        try:
-            self.config[key].append(value)
-        except KeyError:
-            self.config[key] = [value]
+    def append(self, key, value, local=False):
+        if local:
+            self.local_config.setdefault(key, []).append(value)
+        else:
+            self.config.setdefault(key, []).append(value)
 
-    def set(self, key, value):
-        self.config[key] = value
+    def set(self, key, value, local=False):
+        if local:
+            self.local_config[key] = value
+        else:
+            self.config[key] = value
 
     def check_errors(self):
         pass

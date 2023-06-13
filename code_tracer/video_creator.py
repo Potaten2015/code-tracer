@@ -121,7 +121,7 @@ def create_image(change_file, dimensions, final_font_size):
 def create_gif(config, gif_clip, change_files, gif_output_dir):
     frames = []
     logger.info(f"Processing gif for {gif_clip['name']}")
-    gif_frames = int(config.get("gif_length", 5) / len(gif_clip["files"]) * config.get("gif_fps"))
+    gif_frames = int(config.get("gif_length", 5) / len(gif_clip["files"]) * config.get("gif_fps")) or 1
     for change_file in change_files:
         img = create_image(change_file, gif_clip["dimensions"], change_file["font_size"][f"{gif_clip['name']}_gif"])
         frames.extend([img] * gif_frames)
@@ -160,7 +160,7 @@ def create_gifs(config, change_files):
 
 
 def create_video(config, change_files):
-    video_frames = int(config.get("video_length", 300) / len(change_files) * config.get("video_fps"))
+    video_frames = int(config.get("video_length", 300) / len(change_files) * config.get("video_fps")) or 1
     video_output_dir = os.path.expanduser(
         os.path.join(config.get("output_dir"), "videos", config.get("session_folder"))
     )

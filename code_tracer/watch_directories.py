@@ -25,59 +25,45 @@ def get_language(filepath):
     return SUPPORTED_LANGUAGES.get(file_extension, "text")
 
 
-def is_ignored(path, ignore_items):
-    for ignore_item in ignore_items:
-        if fnmatch.fnmatch(path, ignore_item):
-            return True
-    return False
-
-
-def expand_wildcards(paths, config):
-    expanded_paths = []
-    ignore_items = config.get("ignore", [])
-    ignore_items = [os.path.expanduser(os.path.join(config.get("project_dir"), item)) for item in ignore_items]
+def expand_wildcards(paths):
+    new_paths = []
     for path in paths:
-        if '*' in path:
-            new_paths = glob.glob(path, include_hidden=True)
-            for new_path in new_paths:
-                if ".traceignore" in path:
-                    with open(new_path, 'r') as f:
-                        traceignore = f.read().splitlines()
-                    config.append("ignore", [os.path.join(os.path.dirname(new_path), item) for item in traceignore])
-            for new_path in new_paths:
-                if os.path.isdir(new_path):
-                    expanded_paths += expand_wildcards([os.path.join(new_path, '*')], config)
-                else:
-                    expanded_paths += expand_wildcards([new_path], config)
-        elif os.path.isdir(path):
-            expanded_paths += expand_wildcards([os.path.join(path, '*')], config)
+        if os.path.isdir(path):
+            new_paths.extend(glob.glob(os.path.join(path, "**"), recursive=True))
+        elif "**" in path or "*" in path:
+            new_paths.extend(glob.glob(path, recursive=True))
         else:
-            if not is_ignored(path, ignore_items):
-                expanded_paths.append(path)
-    return expanded_paths
+            new_paths.append(path)
+
+    new_new_paths = []
+
+    for path in new_paths:
+        new_new_paths.append(path)
+        if os.path.isdir(path):
+            new_new_paths.extend(expand_wildcards(glob.glob(os.path.join(path, "**/.*"), recursive=True)))
+
+    new_new_paths = [path for path in new_new_paths if os.path.isfile(path)]
+
+    return new_new_paths
 
 
-def remove_ignored(config):
-    ignored = config.get("ignore")
-
-    output_dir = os.path.expanduser(os.path.join(config.get("output_dir")))
-    changes_dir = os.path.join(output_dir, "changes")
-    change_filenames = glob.glob(os.path.join(changes_dir, "*"), recursive=True, include_hidden=True)
-    for change_filename in change_filenames:
-        for ignore_item in ignored:
-            if fnmatch.fnmatch(change_filename, ignore_item):
-                try:
-                    os.remove(change_filename)
-                    logger.info(f"Removed history for {change_filename}")
-                except:
-                    logger.warning(f"Unable to remove history file for {change_filename}")
+def remove_ignored(paths, config):
+    ignored_paths = config.get("ignore")
+    logger.info(
+        "Removing"
+        f" {len([path for path in paths if any([fnmatch.fnmatch(path, ignore) for ignore in ignored_paths])])} ignored"
+        " paths"
+    )
+    return [path for path in paths if not any([fnmatch.fnmatch(path, ignore) for ignore in ignored_paths])]
 
 
-def get_items(key, config):
+def get_paths(key, config):
+    logger.info(f"Getting {key} paths from config")
     items = config.get(key)
     items = [os.path.expanduser(item) for item in items]
     items = [os.path.join(config.get("project_dir"), item) for item in items]
-    items = expand_wildcards(items, config)
+    items = expand_wildcards(items)
+    logger.info(f"Found {len(items)} expanded paths for config['{key}']")
     return items
 
 
@@ -85,15 +71,15 @@ def watch_directories():
     project_dir = os.path.expanduser(input('Enter the path to the project directory: '))
     config_filepath = os.path.join(project_dir, 'tracer.json')
     config = Config(config_filepath)
+    config.set("project_dir", project_dir, local=True)
     session = input(f"Enter the session name (leave blank for current: {config.get('session')}):  ")
     if session:
         config.set("session", session)
         config.append("all_sessions", session)
         config.write(config_filepath)
 
-    config.set("project_dir", project_dir)
-    watch_items = get_items('watch', config)
-    remove_ignored(config)
+    watch_items = get_paths('watch', config)
+    watch_items = remove_ignored(watch_items, config)
     logger.info(f'Watching {len(watch_items)} items.')
 
     # Get the project name
@@ -107,7 +93,7 @@ def watch_directories():
         os.makedirs(output_dir)
 
     # Initialize a dictionary to store the modification times of the watched files
-    last_modified_times = {}
+    last_modified_times = {filepath: os.path.getmtime(filepath) for filepath in watch_items}
 
     # Initialize a list to store the unreadable files
     unreadable_files = []
@@ -117,6 +103,19 @@ def watch_directories():
 
     # Log that the script has started
     logger.info('Code Tracer script started.')
+    logger.info('''
+Always watching...
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣤⣤⣤⣤⣴⣤⣤⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⣀⣴⣾⠿⠛⠋⠉⠁⠀⠀⠀⠈⠙⠻⢷⣦⡀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⣤⣾⡿⠋⠁⠀⣠⣶⣿⡿⢿⣷⣦⡀⠀⠀⠀⠙⠿⣦⣀⠀⠀⠀⠀
+⠀⠀⢀⣴⣿⡿⠋⠀⠀⢀⣼⣿⣿⣿⣶⣿⣾⣽⣿⡆⠀⠀⠀⠀⢻⣿⣷⣶⣄⠀
+⠀⣴⣿⣿⠋⠀⠀⠀⠀⠸⣿⣿⣿⣿⣯⣿⣿⣿⣿⣿⠀⠀⠀⠐⡄⡌⢻⣿⣿⡷
+⢸⣿⣿⠃⢂⡋⠄⠀⠀⠀⢿⣿⣿⣿⣿⣿⣯⣿⣿⠏⠀⠀⠀⠀⢦⣷⣿⠿⠛⠁
+⠀⠙⠿⢾⣤⡈⠙⠂⢤⢀⠀⠙⠿⢿⣿⣿⡿⠟⠁⠀⣀⣀⣤⣶⠟⠋⠁⠀⠀⠀
+⠀⠀⠀⠀⠈⠙⠿⣾⣠⣆⣅⣀⣠⣄⣤⣴⣶⣾⣽⢿⠿⠟⠋⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠙⠛⠛⠙⠋⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+(https://emojicombos.com/eye-ascii-art)
+''')
 
     # Start the watch loop
     try:
@@ -175,7 +174,7 @@ def copy_file(filepath, output_dir, timestamp, project_name, config):
     os.makedirs(changes_dir, exist_ok=True)
 
     updated_filepath = filepath.replace(os.path.sep, "__")
-    change_filename = f"{timestamp}_{updated_filepath}.json"
+    change_filename = f"{timestamp}{updated_filepath}.json"
     change_filepath = os.path.join(changes_dir, change_filename)
 
     data = {
