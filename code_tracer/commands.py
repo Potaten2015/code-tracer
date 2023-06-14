@@ -62,7 +62,7 @@ def init_config_file():
                         if selection == 0:
                             break
                         if selection == len(files) + 1:
-                            watch_items.append(os.path.join(selection_path, '*'))
+                            watch_items.append(os.path.join(selection_path, '**'))
                             break
                         selection_path = files[selection - 1]
                         if os.path.isfile(selection_path):
@@ -77,10 +77,12 @@ def init_config_file():
             print('Invalid selection.')
 
     ignore_items = input('Enter directories or files to ignore, separated by commas: ').split(',')
+    ignore_items.extend(DEFAULTS['ignore'])
     interval = int(input('Enter the interval to check for changes (in seconds): '))
     video_length = int(input('Enter desired video length (in seconds): '))
     github_username = input('Enter GitHub username: ')
     name = input('Enter the project name: ')
+    context_filepath = os.path.join(project_dir, 'context.txt')
 
     # Create the configuration dictionary
     config = {
@@ -92,12 +94,17 @@ def init_config_file():
         'output_dir': output_dir,
         'video_length': video_length,
         'github_username': github_username,
+        'context_filepath': context_filepath,
     }
 
     # Write the configuration to the file
     config_filepath = os.path.join(project_dir, 'tracer.json')
+    
     with open(config_filepath, 'w') as f:
         json.dump(config, f, indent=4)
+
+    with open(context_filepath, 'w') as f:
+        f.write("This is the context that is passed to the GPT model for manuscript generation.")
 
     logger.info("Configuration file created successfully.")
 

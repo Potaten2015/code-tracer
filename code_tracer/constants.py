@@ -20,6 +20,8 @@ DEFAULTS = {
         "**.gif",
         "**.jpeg",
         "**.ico",
+        "**tracer.json",
+        "**context.txt",
     ],
     "interval": 1,
     "video_length": 60,
@@ -41,4 +43,8 @@ DEFAULTS = {
     "session": "default",
     "render_sessions": ["default"],
     "all_sessions": ["default"],
+    "openapi_key": "",
+    "video_catch_phrase": "Howdy!",
+    "sub_project": "main",
+    "total_progress": "Just the beginning...",
 }

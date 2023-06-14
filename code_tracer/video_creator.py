@@ -16,6 +16,8 @@ from PIL import ImageColor
 
 from utils import Config, logger
 
+from get_manuscript import create_payload, get_manuscript
+
 
 STYLE = get_style_by_name('bw')
 BACKROUND_COLOR = ImageColor.getrgb(STYLE.background_color)
@@ -41,10 +43,7 @@ def highlight_code(code, language, font_size=24):
 def group_by_file(changes_files, flatten=False):
     grouped_changes = {}
     for change_file in changes_files:
-        if change_file["filepath"] in grouped_changes:
-            grouped_changes[change_file["filepath"]].append(change_file)
-        else:
-            grouped_changes[change_file["filepath"]] = [change_file]
+        grouped_changes.setdefault(change_file["filepath"], []).append(change_file)
 
     if flatten:
         new_changes_files = []
@@ -164,6 +163,7 @@ def create_video(config, change_files):
     video_output_dir = os.path.expanduser(
         os.path.join(config.get("output_dir"), "videos", config.get("session_folder"))
     )
+    config.set("video_output_dir", video_output_dir, local=True)
 
     os.makedirs(video_output_dir, exist_ok=True)
 
@@ -181,6 +181,11 @@ def create_video(config, change_files):
             logger.info(f"Processing {clip_info['name']}_video")
             for img in tqdm(pool.starmap(create_image, starmap_args), total=len(starmap_args)):
                 clip_info["frames"].extend([img] * video_frames)
+
+    logger.info("Getting manuscript...")
+    grouped_change_files = change_files = group_by_file(change_files)
+    create_payload(grouped_change_files, config)
+    manuscript = get_manuscript(config)
 
     logger.info("Creating videos...")
     for clip_info in video_clips:

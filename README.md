@@ -26,6 +26,12 @@ make install
 
 ## Usage
 
+If using text-to-speech options:
+Google text-to-speech
+https://cloud.google.com/docs/authentication/provide-credentials-adc
+
+Enable the service via the google cloud dashboard.
+
 Usage instructions go here.
 
 ```bash

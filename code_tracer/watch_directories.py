@@ -6,7 +6,6 @@ import glob
 from utils import Config, logger
 from constants import TIME_FORMAT
 
-
 SUPPORTED_LANGUAGES = {
     ".py": "python",
     ".js": "javascript",
@@ -71,6 +70,7 @@ def watch_directories():
     project_dir = os.path.expanduser(input('Enter the path to the project directory: '))
     config_filepath = os.path.join(project_dir, 'tracer.json')
     config = Config(config_filepath)
+    logger.setLevel(config.get("log_level"))
     config.set("project_dir", project_dir, local=True)
     session = input(f"Enter the session name (leave blank for current: {config.get('session')}):  ")
     if session:
@@ -81,6 +81,7 @@ def watch_directories():
     watch_items = get_paths('watch', config)
     watch_items = remove_ignored(watch_items, config)
     logger.info(f'Watching {len(watch_items)} items.')
+    logger.debug(f'Watch items: {watch_items}')
 
     # Get the project name
     project_name = config.get("name")
