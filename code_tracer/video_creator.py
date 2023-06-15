@@ -11,12 +11,13 @@ from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import ImageFormatter
 from pygments.styles import get_style_by_name
-from moviepy.editor import ImageSequenceClip
+from moviepy.editor import ImageSequenceClip, AudioFileClip
 from PIL import ImageColor
 
 from utils import Config, logger
 
 from get_manuscript import create_payload, get_manuscript
+from text_to_speech import text_to_speech
 
 
 STYLE = get_style_by_name('bw')
@@ -182,10 +183,12 @@ def create_video(config, change_files):
             for img in tqdm(pool.starmap(create_image, starmap_args), total=len(starmap_args)):
                 clip_info["frames"].extend([img] * video_frames)
 
-    logger.info("Getting manuscript...")
     grouped_change_files = change_files = group_by_file(change_files)
-    create_payload(grouped_change_files, config)
-    manuscript = get_manuscript(config)
+    payload = create_payload(grouped_change_files, config, logger)
+    manuscript = get_manuscript(payload, config, logger)
+    audio_file = text_to_speech(manuscript, config, logger)
+    audio_clip = AudioFileClip(audio_file)
+
 
     logger.info("Creating videos...")
     for clip_info in video_clips:
@@ -194,6 +197,7 @@ def create_video(config, change_files):
             clip = ImageSequenceClip(clip_info['frames'], fps=config.get("video_fps"))
             output_filename = f"{config.get('name')}_{clip_info['dimensions'][0]}x{clip_info['dimensions'][1]}.mp4"
             output_filepath = os.path.join(video_output_dir, output_filename)
+            clip = clip.set_audio(audio_clip)
             clip.write_videofile(output_filepath, fps=config.get("video_fps"))
 
 

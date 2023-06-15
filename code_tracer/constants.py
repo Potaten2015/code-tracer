@@ -43,7 +43,7 @@ DEFAULTS = {
     "session": "default",
     "render_sessions": ["default"],
     "all_sessions": ["default"],
-    "openapi_key": "",
+    "openai_api_key": "",
     "video_catch_phrase": "Howdy!",
     "sub_project": "main",
     "total_progress": "Just the beginning...",

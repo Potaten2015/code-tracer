@@ -16,6 +16,10 @@ def init_config_file():
     if not os.path.exists(project_dir):
         print('Error: Invalid path.')
         return
+    
+    # Ask for project name
+    default_project_name = os.path.basename(project_dir)
+    project_name = input(f'Enter the project name (default: {default_project_name}): ').strip() or default_project_name
 
     # Ask for the output folder location
     default_output_dir = os.path.join(project_dir, 'output')
@@ -95,6 +99,7 @@ def init_config_file():
         'video_length': video_length,
         'github_username': github_username,
         'context_filepath': context_filepath,
+        'project_name': project_name
     }
 
     # Write the configuration to the file
