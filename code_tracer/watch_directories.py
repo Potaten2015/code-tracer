@@ -33,7 +33,6 @@ def expand_wildcards(paths):
             new_paths.extend(glob.glob(path, recursive=True))
         else:
             new_paths.append(path)
-
     new_new_paths = []
 
     for path in new_paths:
@@ -120,9 +119,19 @@ Always watching...
 
     # Start the watch loop
     try:
+        start_time = time.time()
         while True:
+            if time.time() - start_time > 20:
+                logger.info("Reloading watch items...")
+                watch_items = get_paths('watch', config)
+                watch_items = remove_ignored(watch_items, config)
+                logger.info(f'Watching {len(watch_items)} items.')
+                logger.debug(f'Watch items: {watch_items}')
+                start_time = time.time()
             for item in watch_items:
                 if file_has_changed(item, last_modified_times):
+                    if not os.path.exists(item):
+                        watch_items.remove(item)
                     try:
                         timestamp = time.strftime(TIME_FORMAT)
                         size_changed = copy_file(item, output_dir, timestamp, project_name, config)
@@ -152,6 +161,10 @@ Always watching...
 def file_has_changed(filepath, last_modified_times):
     # Check if the file has been seen before
     if filepath in last_modified_times:
+        if not os.path.exists(filepath):
+            last_modified_times.pop(filepath)
+            logger.warning(f"File {filepath} no longer not exists.")
+            return True
         # Check if the modification time has changed
         if os.path.getmtime(filepath) > last_modified_times[filepath]:
             # Update the modification time
@@ -159,7 +172,10 @@ def file_has_changed(filepath, last_modified_times):
             return True
     else:
         # Add the file to the dictionary
-        last_modified_times[filepath] = os.path.getmtime(filepath)
+        if os.path.exists(filepath):
+            last_modified_times[filepath] = os.path.getmtime(filepath)
+        else:
+            logger.warning(f"File {filepath} no longer not exists.")
         return True
 
     return False
@@ -168,8 +184,11 @@ def file_has_changed(filepath, last_modified_times):
 def copy_file(filepath, output_dir, timestamp, project_name, config):
     language = get_language(filepath)
 
-    with open(filepath, "r", encoding="utf-8") as f:
-        content = f.read()
+    if os.path.exists(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+    else:
+        content = ""
 
     changes_dir = os.path.join(output_dir, "changes")
     os.makedirs(changes_dir, exist_ok=True)

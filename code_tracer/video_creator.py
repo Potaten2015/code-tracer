@@ -67,7 +67,7 @@ def add_filler_lines(change_file):
     return change_file["content"] + ("\n" * (change_file["max_lines"] - change_file["total_lines"]))
 
 
-def create_canvas(change_file, dimensions):
+def create_canvas(dimensions):
     canvas_r = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[0])
     canvas_g = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[1])
     canvas_b = np.full((dimensions[1], dimensions[0]), dtype=np.uint8, fill_value=BACKROUND_COLOR[2])
@@ -76,7 +76,7 @@ def create_canvas(change_file, dimensions):
 
 
 def create_image(change_file, dimensions, final_font_size):
-    canvas = create_canvas(change_file, dimensions)
+    canvas = create_canvas(dimensions)
     header_size = add_header(change_file, canvas=canvas)
     extended_content = add_filler_lines(change_file)
     max_code_height = dimensions[1] - header_size[1]
@@ -188,7 +188,6 @@ def create_video(config, change_files):
     manuscript = get_manuscript(payload, config, logger)
     audio_file = text_to_speech(manuscript, config, logger)
     audio_clip = AudioFileClip(audio_file)
-
 
     logger.info("Creating videos...")
     for clip_info in video_clips:
