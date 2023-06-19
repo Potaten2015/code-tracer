@@ -27,8 +27,7 @@ def create_payload(change_files, config, logger):
 
 
 def get_manuscript(payload, config, logger):
-    model = "gpt-3.5-turbo"
-    encoding = tiktoken.encoding_for_model(model)
+    encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
     logger.info("Using GPT to generate manuscript...")
     context = open(config.get("context_filepath"), "r").read()
     tokens = {}
@@ -37,6 +36,10 @@ def get_manuscript(payload, config, logger):
     encoded = encoding.encode(f"{json.dumps(payload)} {context}")
     logger.info(f"Tokens per file: {tokens}")
     logger.info(f"Total tokens: {len(encoded)}")
+    if len(encoded) > 300:
+        model = "gpt-3.5-turbo-16k"
+    else:
+        model = "gpt-3.5-turbo"
     openai.api_key = config.get("openai_api_key")
     completion = openai.ChatCompletion.create(
         model=model,

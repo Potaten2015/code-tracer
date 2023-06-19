@@ -121,7 +121,7 @@ Always watching...
     try:
         start_time = time.time()
         while True:
-            if time.time() - start_time > 20:
+            if time.time() - start_time > 60:
                 logger.info("Reloading watch items...")
                 watch_items = get_paths('watch', config)
                 watch_items = remove_ignored(watch_items, config)
