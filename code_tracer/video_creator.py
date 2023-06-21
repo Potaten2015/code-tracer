@@ -166,7 +166,7 @@ def create_video(config, change_files):
     )
     config.set("video_output_dir", video_output_dir, local=True)
 
-    os.makedirs(video_output_dir, exist_ok=True)
+    os.makedirs(video_output_dir, exist_ok=True, mode=0o777)
 
     video_clips = [
         {"name": video_resolution["name"], "dimensions": video_resolution["dimensions"], "frames": []}

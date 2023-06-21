@@ -90,7 +90,7 @@ def watch_directories():
 
     # Create the output directory if it doesn't exist
     if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+        os.makedirs(output_dir, mode=0o777)
 
     # Initialize a dictionary to store the modification times of the watched files
     last_modified_times = {filepath: os.path.getmtime(filepath) for filepath in watch_items}
@@ -191,7 +191,7 @@ def copy_file(filepath, output_dir, timestamp, project_name, config):
         content = ""
 
     changes_dir = os.path.join(output_dir, "changes")
-    os.makedirs(changes_dir, exist_ok=True)
+    os.makedirs(changes_dir, exist_ok=True, mode=0o777)
 
     updated_filepath = filepath.replace(os.path.sep, "__")
     change_filename = f"{timestamp}{updated_filepath}.json"

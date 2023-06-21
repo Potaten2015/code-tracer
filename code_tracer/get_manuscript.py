@@ -23,20 +23,46 @@ def create_payload(change_files, config, logger):
         "seconds": config.get("video_length"),
         "sub_project": config.get("sub_project"),
     }
+
     return payload
 
 
 def get_manuscript(payload, config, logger):
     encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
     logger.info("Using GPT to generate manuscript...")
-    context = open(config.get("context_filepath"), "r").read()
+    context = open(os.path.expanduser(config.get("context_filepath")), "r").read()
     tokens = {}
     for filename, file_changes in payload["changes"].items():
         tokens[filename] = len(encoding.encode(json.dumps(file_changes)))
     encoded = encoding.encode(f"{json.dumps(payload)} {context}")
-    logger.info(f"Tokens per file: {tokens}")
     logger.info(f"Total tokens: {len(encoded)}")
-    if len(encoded) > 300:
+
+    reducing = True
+    while reducing:
+        encoded = encoding.encode(f"{json.dumps(payload)} {context}")
+        logger.info(f"Total tokens: {len(encoded)}")
+        print("Would you like to remove any files from the GPT payload?")
+        for i, (filename, token_count) in enumerate(tokens.items()):
+            print(f"{i + 1}. {filename} ({token_count} tokens)")
+        print("0. No")
+        selection = input("Enter a number: ")
+        try:
+            selection = int(selection)
+            if selection == 0:
+                reducing = False
+            else:
+                filename = list(tokens.keys())[selection - 1]
+                proceed = input(f"Are you sure you want to remove {filename}? (y/n) ")
+                if proceed == "y":
+                    del tokens[filename]
+                    del payload["changes"][filename]
+        except (ValueError, IndexError):
+            print("Invalid selection.")
+
+    encoded = encoding.encode(f"{json.dumps(payload)} {context}")
+    logger.info(f"Total tokens: {len(encoded)}")
+
+    if len(encoded) > 3500:
         model = "gpt-3.5-turbo-16k"
     else:
         model = "gpt-3.5-turbo"
