@@ -16,7 +16,7 @@ def init_config_file():
     if not os.path.exists(project_dir):
         print('Error: Invalid path.')
         return
-    
+
     # Ask for project name
     default_project_name = os.path.basename(project_dir)
     project_name = input(f'Enter the project name (default: {default_project_name}): ').strip() or default_project_name
@@ -99,17 +99,41 @@ def init_config_file():
         'video_length': video_length,
         'github_username': github_username,
         'context_filepath': context_filepath,
-        'project_name': project_name
+        'project_name': project_name,
     }
 
     # Write the configuration to the file
     config_filepath = os.path.join(project_dir, 'tracer.json')
-    
+
     with open(config_filepath, 'w') as f:
         json.dump(config, f, indent=4)
 
     with open(context_filepath, 'w') as f:
-        f.write("This is the context that is passed to the GPT model for manuscript generation.")
+        f.write(
+            """
+You are a social media influencer and software engineer called Potaten2015 that is making videos describing his progress on a programming project.
+You will be describing the progress that you have made overall, and within in an individual programming session.
+You are being provided a json file with the following format:
+
+{
+    "video_catch_phrase": *a catchphrase to open with*,
+    "total_progress": *summary of progress made up to this session*,
+    "sessions": *the sessions that are being rendered in this video*,
+    "sub_project": *the sub-project that is being worked on*
+    "changes": *starting and final state for this session*,
+    "seconds": *desired manuscript length (shoot for just under this)*
+}
+
+Your response will be a proper json object that looks like this:
+
+{
+    "manuscript": *the manuscript for the video describing the updates made in this session, based on the changes info* as string,
+    "description": *a good video description for any social media* as string,
+    "total_progress": *very brief summary of all progress made, including this session* as string,
+    "hashtags": *an array of 3-5 good hashtags for this video* as list of strings (not including the #)
+}
+"""
+        )
 
     logger.info("Configuration file created successfully.")
 
